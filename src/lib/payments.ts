@@ -2,6 +2,15 @@ import type { Package, Tier } from '../types';
 import { uid } from './storage';
 
 export const RAZORPAY_KEY_ID = (import.meta.env.VITE_RAZORPAY_KEY_ID as string) || 'rzp_test_EXYDEMOKEY01';
+export const PAYU_MERCHANT_KEY = (import.meta.env.VITE_PAYU_MERCHANT_KEY as string) || 'payu_test_EXYDEMO';
+
+/** Module 7.2 — both Indian gateways are supported; the user picks at checkout. */
+export type Gateway = 'razorpay' | 'payu';
+
+export const GATEWAYS: Array<{ id: Gateway; label: string; blurb: string; keyId: string }> = [
+  { id: 'razorpay', label: 'Razorpay', blurb: 'UPI · Cards · Net Banking', keyId: RAZORPAY_KEY_ID },
+  { id: 'payu', label: 'PayU', blurb: 'UPI · Cards · Net Banking', keyId: PAYU_MERCHANT_KEY },
+];
 
 export const PACKAGES: Package[] = [
   {
@@ -78,6 +87,7 @@ export interface PaymentResult {
   method: PayMethod;
   amount: number;
   tier: Tier;
+  gateway: Gateway;
   at: string;
 }
 
@@ -99,6 +109,7 @@ export function processPayment(
   tier: Tier,
   amount: number,
   method: PayMethod,
+  gateway: Gateway = 'razorpay',
 ): Promise<PaymentResult> {
   const { orderId } = createOrder(tier, amount);
   return new Promise((resolve) => {
@@ -106,10 +117,11 @@ export function processPayment(
       resolve({
         ok: true,
         orderId,
-        paymentId: uid('pay'),
+        paymentId: uid(gateway === 'payu' ? 'payu' : 'pay'),
         method,
         amount,
         tier,
+        gateway,
         at: new Date().toISOString(),
       });
     }, 1400);

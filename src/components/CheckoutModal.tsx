@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { Package, Tier } from '../types';
-import { processPayment, RAZORPAY_KEY_ID, type PayMethod, type PaymentResult } from '../lib/payments';
+import { GATEWAYS, processPayment, type Gateway, type PayMethod, type PaymentResult } from '../lib/payments';
 import { inr } from '../lib/format';
 import { Modal } from './Ui';
 import { IconCheck, IconLock, IconWallet } from './Icons';
@@ -21,6 +21,7 @@ interface Props {
 
 export function CheckoutModal({ open, onClose, pkg, onPaid }: Props) {
   const [method, setMethod] = useState<PayMethod>('upi-gpay');
+  const [gateway, setGateway] = useState<Gateway>('razorpay');
   const [upiId, setUpiId] = useState('');
   const [card, setCard] = useState({ number: '', expiry: '', cvv: '', name: '' });
   const [bank, setBank] = useState('HDFC Bank');
@@ -52,7 +53,7 @@ export function CheckoutModal({ open, onClose, pkg, onPaid }: Props) {
       if (card.cvv.length < 3) return setError('Enter the 3-digit CVV.');
     }
     setBusy(true);
-    const result = await processPayment(pkg.id, total, method);
+    const result = await processPayment(pkg.id, total, method, gateway);
     setBusy(false);
     setDone(result);
     onPaid(pkg.id, result);
@@ -110,7 +111,7 @@ export function CheckoutModal({ open, onClose, pkg, onPaid }: Props) {
       open={open}
       onClose={onClose}
       title={`Checkout — ${pkg.name}`}
-      subtitle={`Secure payment via Razorpay · Key ${RAZORPAY_KEY_ID}`}
+      subtitle={`Secure INR payment via ${GATEWAYS.find((item) => item.id === gateway)?.label} · UPI, Net Banking & Cards`}
       footer={
         <>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 12, color: 'var(--ink-3)' }}>
@@ -127,6 +128,25 @@ export function CheckoutModal({ open, onClose, pkg, onPaid }: Props) {
         </>
       }
     >
+      <div className="filter-group__title">Payment gateway</div>
+      <div className="pay-grid" style={{ marginBottom: 16 }}>
+        {GATEWAYS.map((item) => (
+          <button
+            key={item.id}
+            className={`pay-opt${gateway === item.id ? ' is-on' : ''}`}
+            onClick={() => setGateway(item.id)}
+          >
+            <span className="pay-logo" style={{ background: item.id === 'razorpay' ? '#3395FF' : '#00A0E3' }}>
+              {item.id === 'razorpay' ? 'R' : 'Pu'}
+            </span>
+            <span style={{ textAlign: 'left' }}>
+              {item.label}
+              <em style={{ display: 'block', fontStyle: 'normal', fontSize: 11, opacity: 0.7 }}>{item.blurb}</em>
+            </span>
+          </button>
+        ))}
+      </div>
+
       <div className="filter-group__title">UPI — instant</div>
       <div className="pay-grid" style={{ marginBottom: 10 }}>
         {UPI_APPS.map((app) => (

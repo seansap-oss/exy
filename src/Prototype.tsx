@@ -47,7 +47,10 @@ import { CheckoutModal } from './components/CheckoutModal';
 import { SellFlow } from './components/SellFlow';
 import { AdminPanel } from './components/AdminPanel';
 import { VideoEmbed } from './components/VideoEmbed';
-import { VisualFeed, FullscreenPlayer } from './components/VisualFeed';
+import { VisualFeed } from './components/VisualFeed';
+import { LiveClassifiedsOverlay } from './components/LiveClassifiedsOverlay';
+import { ExpressPostDrawer } from './components/ExpressPostDrawer';
+import { clearShareParams, isShareLaunch, readSharePayload, type SharePayload } from './lib/shareTarget';
 import { Messenger } from './components/Messenger';
 import {
   CategoryOrb,
@@ -95,7 +98,7 @@ import {
 
 export default function Prototype() {
   /* ------------------------------ persisted state ------------------------------ */
-  const [theme, setTheme] = useState<ThemeMode>(() => load<ThemeMode>('theme', 'airy'));
+  const [theme, setTheme] = useState<ThemeMode>(() => load<ThemeMode>('theme', 'gold'));
   const [profile, setProfile] = useState<Profile | null>(() => load<Profile | null>('profile', null));
   const [, setSession] = useState<Session | null>(() => load<Session | null>('session', null));
   const [profiles, setProfiles] = useState<Profile[]>(() => load<Profile[]>('profiles', []));
@@ -119,6 +122,7 @@ export default function Prototype() {
   const [sellOpen, setSellOpen] = useState(false);
   const [checkoutPkg, setCheckoutPkg] = useState<Package | null>(null);
   const [fullscreen, setFullscreen] = useState<Listing | null>(null);
+  const [share, setShare] = useState<SharePayload | null>(null);
   const [toasts, setToasts] = useState<ToastMsg[]>([]);
   const [pendingAction, setPendingAction] = useState<'sell' | 'save' | 'message' | null>(null);
   const [pendingTarget, setPendingTarget] = useState<string | null>(null);
@@ -153,6 +157,13 @@ export default function Prototype() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
+  /* Module 2.1 — a Reel shared into EXY opens the Express Post Drawer. */
+  useEffect(() => {
+    if (!isShareLaunch()) return;
+    const payload = readSharePayload();
+    if (payload) setShare(payload);
   }, []);
 
   const toast = useCallback((text: string, kind: ToastMsg['kind'] = 'ok') => {
@@ -489,6 +500,7 @@ export default function Prototype() {
               onContact={startThread}
               onQualifiedView={qualifiedView}
               onImpression={(id) => recordEvent(id, 'impression')}
+              onExpand={setFullscreen}
             />
           </div>
         )}
@@ -710,7 +722,43 @@ export default function Prototype() {
 
       <CheckoutModal open={!!checkoutPkg} onClose={() => setCheckoutPkg(null)} pkg={checkoutPkg} onPaid={onPaid} />
 
-      {fullscreen && <FullscreenPlayer listing={fullscreen} onClose={() => setFullscreen(null)} />}
+      {fullscreen && (
+        <LiveClassifiedsOverlay
+          listing={fullscreen}
+          seller={sellerMap[fullscreen.sellerId]}
+          saved={saved.includes(fullscreen.id)}
+          onClose={() => setFullscreen(null)}
+          onMessage={(id) => {
+            setFullscreen(null);
+            startThread(id);
+          }}
+          onCallback={(id) => {
+            setFullscreen(null);
+            startThread(id);
+            toast('Opening chat � send a private callback request from here.', 'info');
+          }}
+          onToggleSave={toggleSave}
+          onQualifiedView={qualifiedView}
+        />
+      )}
+
+      <ExpressPostDrawer
+        payload={share}
+        profile={profile}
+        onClose={() => {
+          setShare(null);
+          clearShareParams();
+        }}
+        onPublish={(listing) => {
+          onPublish(listing);
+          clearShareParams();
+          toast('Published from shared reel', 'ok');
+        }}
+        onNeedAuth={() => {
+          setAuthReason('Sign in to publish the reel you shared.');
+          setAuthOpen(true);
+        }}
+      />
 
       <ToastStack toasts={toasts} />
     </div>

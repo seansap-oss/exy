@@ -27,6 +27,8 @@ interface Props {
   /** fires once a card has been dwelled on for >10s */
   onQualifiedView: (id: string, dwellSec: number) => void;
   onImpression: (id: string) => void;
+  /** Opens the Module 4 Embedded Live-Classifieds Overlay. */
+  onExpand: (listing: Listing) => void;
 }
 
 /**
@@ -45,6 +47,7 @@ export function VisualFeed({
   onContact,
   onQualifiedView,
   onImpression,
+  onExpand,
 }: Props) {
   const deck = listings.filter((listing) => listing.status === 'active');
   const initial = Math.max(0, startId ? deck.findIndex((listing) => listing.id === startId) : 0);
@@ -52,7 +55,6 @@ export function VisualFeed({
   const [index, setIndex] = useState(initial);
   const [muted, setMuted] = useState(true);
   const [started, setStarted] = useState(false);
-  const [fullscreen, setFullscreen] = useState<Listing | null>(null);
   const [drag, setDrag] = useState(0);
 
   const dwellRef = useRef<{ id: string; at: number } | null>(null);
@@ -94,17 +96,13 @@ export function VisualFeed({
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if (fullscreen) {
-        if (event.key === 'Escape') setFullscreen(null);
-        return;
-      }
       if (event.key === 'ArrowDown' || event.key === 'ArrowRight') step(1);
       if (event.key === 'ArrowUp' || event.key === 'ArrowLeft') step(-1);
       if (event.key === 'm') setMuted((prev) => !prev);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [step, fullscreen]);
+  }, [step]);
 
   if (!deck.length || !active) {
     return (
@@ -155,7 +153,7 @@ export function VisualFeed({
                 started={started && depth === 0}
                 saved={saved.includes(listing.id)}
                 onStart={() => setStarted(true)}
-                onExpand={() => setFullscreen(listing)}
+                onExpand={() => onExpand(listing)}
                 onToggleSave={() => onToggleSave(listing.id)}
                 onDetails={() => onOpenListing(listing.id)}
                 onContact={() => onContact(listing.id)}
@@ -197,8 +195,6 @@ export function VisualFeed({
         {muted ? <IconMuted size={20} /> : <IconUnmuted size={20} />}
         <span>{muted ? 'Tap for sound' : 'Sound on'}</span>
       </button>
-
-      {fullscreen && <FullscreenPlayer listing={fullscreen} onClose={() => setFullscreen(null)} />}
     </div>
   );
 }

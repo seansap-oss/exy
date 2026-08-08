@@ -8,11 +8,21 @@
   "display": "standalone",
   "display_override": ["standalone", "minimal-ui"],
   "orientation": "portrait-primary",
-  "background_color": "#fbf7f2",
-  "theme_color": "#f2713a",
+  "background_color": "#0c0b09",
+  "theme_color": "#0c0b09",
   "lang": "en-IN",
   "dir": "ltr",
   "categories": ["shopping", "business", "lifestyle"],
+  "share_target": {
+    "action": "/share",
+    "method": "GET",
+    "enctype": "application/x-www-form-urlencoded",
+    "params": {
+      "title": "title",
+      "text": "text",
+      "url": "url"
+    }
+  },
   "icons": [
     {
       "src": "/icon-192.svg",
