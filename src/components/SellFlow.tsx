@@ -1,0 +1,549 @@
+import { useMemo, useState } from 'react';
+import type { Listing, ListingCondition, NativeMedia, Profile } from '../types';
+import { CATEGORIES, CATEGORY_MAP } from '../data/categories';
+import { parseVideoUrl, providerLabel } from '../lib/embeds';
+import { TIER_LIMITS } from '../lib/payments';
+import { uid } from '../lib/storage';
+import { MediaUploader } from './MediaUploader';
+import { Modal, Switch } from './Ui';
+import { VideoEmbed } from './VideoEmbed';
+import { IconCheck, IconLock, IconUpload, IconVideo } from './Icons';
+
+const SWATCHES = [
+  'linear-gradient(135deg,#fde68a,#f2713a)',
+  'linear-gradient(135deg,#bfdbfe,#2563eb)',
+  'linear-gradient(135deg,#bbf7d0,#16a34a)',
+  'linear-gradient(135deg,#e9d5ff,#7c3aed)',
+  'linear-gradient(135deg,#fed7aa,#c2410c)',
+  'linear-gradient(135deg,#cbd5e1,#334155)',
+  'linear-gradient(135deg,#a5f3fc,#0e7490)',
+  'linear-gradient(135deg,#fbcfe8,#be185d)',
+];
+
+interface Props {
+  open: boolean;
+  onClose: () => void;
+  profile: Profile;
+  activeAdCount: number;
+  onPublish: (listing: Listing) => void;
+  onUpgrade: () => void;
+  onToast: (text: string, kind?: 'ok' | 'err' | 'info') => void;
+}
+
+export function SellFlow({ open, onClose, profile, activeAdCount, onPublish, onUpgrade, onToast }: Props) {
+  const limits = TIER_LIMITS[profile.tier];
+  const [step, setStep] = useState(0);
+  const [form, setForm] = useState({
+    title: '',
+    description: '',
+    price: '',
+    priceUnit: '',
+    negotiable: true,
+    categoryId: '',
+    subCategoryId: '',
+    condition: 'new' as ListingCondition,
+    city: '',
+    location: '',
+    videoUrl: '',
+    photos: [SWATCHES[0]] as string[],
+    hidePhone: false,
+    phone: '',
+    tags: [] as string[],
+    features: ['', '', ''],
+  });
+  const [hosted, setHosted] = useState<NativeMedia[]>([]);
+  const [error, setError] = useState('');
+
+  const subs = form.categoryId ? (CATEGORY_MAP[form.categoryId]?.children ?? []) : [];
+  const video = useMemo(() => parseVideoUrl(form.videoUrl), [form.videoUrl]);
+  const overQuota = activeAdCount >= limits.ads;
+
+  const set = <K extends keyof typeof form>(key: K, value: (typeof form)[K]) =>
+    setForm((prev) => ({ ...prev, [key]: value }));
+
+  function next() {
+    setError('');
+    if (step === 0) {
+      if (!form.categoryId || !form.subCategoryId) return setError('Pick a category and subcategory.');
+    }
+    if (step === 1) {
+      if (form.title.trim().length < 8) return setError('Title must be at least 8 characters.');
+      if (form.description.trim().length < 20) return setError('Add a description of at least 20 characters.');
+      if (!form.city.trim()) return setError('Enter the city where the item or service is located.');
+    }
+    setStep((prev) => Math.min(prev + 1, 3));
+  }
+
+  function publish() {
+    setError('');
+    if (overQuota) return setError(`Your ${profile.tier} plan allows ${limits.ads} active ad(s). Upgrade to post more.`);
+    if (!form.hidePhone && form.phone.replace(/\D/g, '').length < 10) {
+      return setError('Enter a valid contact number, or enable phone privacy masking.');
+    }
+
+    const listing: Listing = {
+      id: uid('lst'),
+      title: form.title.trim(),
+      description: form.description.trim(),
+      price: Number(form.price) || 0,
+      priceUnit: form.priceUnit.trim() || undefined,
+      negotiable: form.negotiable,
+      categoryId: form.categoryId,
+      subCategoryId: form.subCategoryId,
+      tags: form.tags,
+      features: form.features.map((f) => f.trim()).filter(Boolean),
+      location: form.location.trim() || `${form.city.trim()}, India`,
+      region: 'india',
+      city: form.city.trim(),
+      sellerId: profile.id,
+      video:
+        limits.videos > 0 && hosted.length
+          ? {
+              provider: 'native' as const,
+              url: hosted[0].src,
+              externalId: hosted[0].id,
+              embedSrc: hosted[0].src,
+              poster: hosted[0].poster,
+            }
+          : limits.videos > 0 && video
+            ? video
+            : undefined,
+      media: hosted.length ? hosted : undefined,
+      photos: form.photos.slice(0, limits.photos),
+      tier: profile.tier,
+      featured: profile.tier === 'comprehensive' || profile.tier === 'dealer',
+      condition: form.condition,
+      createdAt: new Date().toISOString(),
+      viewCount: 0,
+      saveCount: 0,
+      clickCount: 0,
+      leadCount: 0,
+      todayViews: 0,
+      hidePhone: form.hidePhone,
+      status: 'active',
+    };
+    onPublish(listing);
+    setStep(0);
+    setForm({
+      title: '',
+      description: '',
+      price: '',
+      priceUnit: '',
+      negotiable: true,
+      categoryId: '',
+      subCategoryId: '',
+      condition: 'new',
+      city: '',
+      location: '',
+      videoUrl: '',
+      photos: [SWATCHES[0]],
+      hidePhone: false,
+      phone: '',
+      tags: [],
+      features: ['', '', ''],
+    });
+    setHosted([]);
+    onClose();
+  }
+
+  const steps = ['Category', 'Details', 'Media', 'Contact'];
+
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title="Post a listing"
+      subtitle={`${profile.tier.toUpperCase()} plan · ${activeAdCount}/${limits.ads} ads used · ${limits.photos} photos · ${limits.videos ? `${limits.videos} video embed` : 'no video embed'}`}
+      footer={
+        <>
+          {step > 0 && (
+            <button className="btn btn--ghost" onClick={() => setStep((prev) => prev - 1)}>
+              Back
+            </button>
+          )}
+          <span className="spacer" />
+          <span style={{ fontSize: 12, color: 'var(--ink-3)', fontWeight: 700 }}>
+            Step {step + 1} of {steps.length}
+          </span>
+          {step < 3 ? (
+            <button className="btn btn--primary" onClick={next}>
+              Continue
+            </button>
+          ) : (
+            <button className="btn btn--primary" onClick={publish} disabled={overQuota}>
+              <IconCheck size={16} /> Publish listing
+            </button>
+          )}
+        </>
+      }
+    >
+      <div className="tabs" style={{ marginBottom: 20 }}>
+        {steps.map((label, index) => (
+          <button
+            key={label}
+            className={`tab${index === step ? ' is-on' : ''}`}
+            onClick={() => index < step && setStep(index)}
+          >
+            {index + 1}. {label}
+          </button>
+        ))}
+      </div>
+
+      {overQuota && (
+        <div className="urgency" style={{ marginBottom: 18 }}>
+          <span className="urgency__flame">⚡</span>
+          <span>
+            You've used all {limits.ads} active ad slots on the {profile.tier} plan.{' '}
+            <button style={{ fontWeight: 800, textDecoration: 'underline' }} onClick={onUpgrade}>
+              Upgrade now
+            </button>{' '}
+            to publish more.
+          </span>
+        </div>
+      )}
+
+      {step === 0 && (
+        <>
+          <div className="field">
+            <span className="field__label">Broad category</span>
+            <div className="chips">
+              {CATEGORIES.map((category) => (
+                <button
+                  key={category.id}
+                  className={`chip${form.categoryId === category.id ? ' is-on' : ''}`}
+                  onClick={() => setForm((prev) => ({ ...prev, categoryId: category.id, subCategoryId: '' }))}
+                >
+                  {category.name}
+                </button>
+              ))}
+            </div>
+          </div>
+          {subs.length > 0 && (
+            <div className="field">
+              <span className="field__label">Subcategory</span>
+              <div className="chips">
+                {subs.map((sub) => (
+                  <button
+                    key={sub.id}
+                    className={`chip${form.subCategoryId === sub.id ? ' is-on' : ''}`}
+                    onClick={() => set('subCategoryId', sub.id)}
+                  >
+                    {sub.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+          {form.subCategoryId && (
+            <div className="field">
+              <span className="field__label">Tags (helps buyers find you)</span>
+              <div className="chips">
+                {(subs.find((s) => s.id === form.subCategoryId)?.tags ?? []).map((tag) => (
+                  <button
+                    key={tag}
+                    className={`chip chip--sm${form.tags.includes(tag) ? ' is-on' : ''}`}
+                    onClick={() =>
+                      set('tags', form.tags.includes(tag) ? form.tags.filter((t) => t !== tag) : [...form.tags, tag])
+                    }
+                  >
+                    {tag}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </>
+      )}
+
+      {step === 1 && (
+        <>
+          <div className="field">
+            <label className="field__label" htmlFor="s-title">
+              Listing title
+            </label>
+            <input
+              id="s-title"
+              className="input"
+              value={form.title}
+              onChange={(event) => set('title', event.target.value)}
+              placeholder="e.g. Wire-cut red bricks — truckload delivery in 24 hrs"
+              maxLength={90}
+            />
+            <span className="field__hint">{form.title.length}/90 characters</span>
+          </div>
+          <div className="field">
+            <label className="field__label" htmlFor="s-desc">
+              Description
+            </label>
+            <textarea
+              id="s-desc"
+              className="textarea"
+              value={form.description}
+              onChange={(event) => set('description', event.target.value)}
+              placeholder="Describe condition, quantity, delivery terms and what makes your offer better."
+            />
+          </div>
+          <div className="form-grid">
+            <div className="field">
+              <label className="field__label" htmlFor="s-price">
+                Price (₹) — leave 0 for "Ask price"
+              </label>
+              <input
+                id="s-price"
+                className="input"
+                type="number"
+                min={0}
+                value={form.price}
+                onChange={(event) => set('price', event.target.value)}
+                placeholder="18500"
+              />
+            </div>
+            <div className="field">
+              <label className="field__label" htmlFor="s-unit">
+                Price unit (optional)
+              </label>
+              <input
+                id="s-unit"
+                className="input"
+                value={form.priceUnit}
+                onChange={(event) => set('priceUnit', event.target.value)}
+                placeholder="per bag / per month"
+              />
+            </div>
+          </div>
+          <div className="form-grid">
+            <div className="field">
+              <label className="field__label" htmlFor="s-city">
+                City
+              </label>
+              <input
+                id="s-city"
+                className="input"
+                value={form.city}
+                onChange={(event) => set('city', event.target.value)}
+                placeholder="Bengaluru"
+              />
+            </div>
+            <div className="field">
+              <label className="field__label" htmlFor="s-loc">
+                Locality / area
+              </label>
+              <input
+                id="s-loc"
+                className="input"
+                value={form.location}
+                onChange={(event) => set('location', event.target.value)}
+                placeholder="Whitefield, Bengaluru"
+              />
+            </div>
+          </div>
+          <div className="form-grid">
+            <div className="field">
+              <label className="field__label" htmlFor="s-cond">
+                Condition
+              </label>
+              <select
+                id="s-cond"
+                className="select"
+                value={form.condition}
+                onChange={(event) => set('condition', event.target.value as ListingCondition)}
+              >
+                <option value="new">New</option>
+                <option value="like-new">Like new</option>
+                <option value="good">Good</option>
+                <option value="used">Used</option>
+                <option value="service">Service / Contract</option>
+              </select>
+            </div>
+            <div className="field">
+              <span className="field__label">Pricing flexibility</span>
+              <Switch on={form.negotiable} onChange={(value) => set('negotiable', value)} label="Price negotiable" />
+            </div>
+          </div>
+          <div className="field">
+            <span className="field__label">Key features (up to 3)</span>
+            {form.features.map((feature, index) => (
+              <input
+                key={index}
+                className="input"
+                style={{ marginBottom: 8 }}
+                value={feature}
+                onChange={(event) => {
+                  const copy = [...form.features];
+                  copy[index] = event.target.value;
+                  set('features', copy);
+                }}
+                placeholder={['Free delivery within city', 'GST invoice provided', '1-year warranty'][index]}
+              />
+            ))}
+          </div>
+        </>
+      )}
+
+      {step === 2 && (
+        <>
+          <div className="field">
+            <label className="field__label" htmlFor="s-video">
+              <IconVideo size={13} /> Social video embed (Reel / Short / FB video)
+            </label>
+            <input
+              id="s-video"
+              className="input"
+              value={form.videoUrl}
+              onChange={(event) => set('videoUrl', event.target.value)}
+              placeholder="https://www.instagram.com/reel/… or https://youtube.com/shorts/…"
+              disabled={limits.videos === 0}
+            />
+            {limits.videos === 0 ? (
+              <span className="field__hint">
+                Video embeds are not included in the Free plan.{' '}
+                <button style={{ color: 'var(--accent)', fontWeight: 700 }} onClick={onUpgrade}>
+                  Upgrade to Standard (₹200)
+                </button>
+              </span>
+            ) : (
+              <span className="field__hint">
+                {video
+                  ? `✓ Detected ${providerLabel(video.provider)} — id ${video.externalId}`
+                  : 'Paste a public Instagram Reel, YouTube Short, Facebook Reel or TikTok URL.'}
+              </span>
+            )}
+          </div>
+
+          {video && limits.videos > 0 && !hosted.length && (
+            <div style={{ maxWidth: 300, margin: '0 auto 18px' }}>
+              <VideoEmbed video={video} title="Listing hero preview" />
+            </div>
+          )}
+
+          <div className="divider" />
+
+          <div className="field">
+            <span className="field__label">
+              <IconUpload size={13} /> Or upload your own video — hosted on EXY, compressed to 480p
+            </span>
+            {limits.videos === 0 ? (
+              <span className="field__hint">
+                Native video hosting starts on the Standard plan.{' '}
+                <button style={{ color: 'var(--accent)', fontWeight: 700 }} onClick={onUpgrade}>
+                  Upgrade
+                </button>
+              </span>
+            ) : (
+              <MediaUploader
+                kind="video"
+                items={hosted}
+                onChange={setHosted}
+                max={limits.videos}
+                onError={(message) => onToast(message, 'err')}
+              />
+            )}
+          </div>
+
+          <div className="divider" />
+
+          <div className="field">
+            <span className="field__label">
+              <IconUpload size={13} /> Photo gallery ({form.photos.length}/{limits.photos})
+            </span>
+            <span className="field__hint" style={{ marginBottom: 10 }}>
+              Pick a cover style for each photo slot. Uploads bind to your CDN bucket in production.
+            </span>
+            <div className="swatches">
+              {SWATCHES.map((swatch) => {
+                const on = form.photos.includes(swatch);
+                return (
+                  <button
+                    key={swatch}
+                    className={`swatch${on ? ' is-on' : ''}`}
+                    style={{ background: swatch }}
+                    aria-label="Photo slot"
+                    onClick={() => {
+                      if (on) {
+                        if (form.photos.length > 1) set('photos', form.photos.filter((p) => p !== swatch));
+                      } else if (form.photos.length < limits.photos) {
+                        set('photos', [...form.photos, swatch]);
+                      } else {
+                        setError(`Your plan allows ${limits.photos} photos. Upgrade for more.`);
+                      }
+                    }}
+                  />
+                );
+              })}
+            </div>
+          </div>
+        </>
+      )}
+
+      {step === 3 && (
+        <>
+          <div className="field">
+            <span className="field__label">
+              <IconLock size={13} /> Phone privacy
+            </span>
+            <Switch
+              on={form.hidePhone}
+              onChange={(value) => set('hidePhone', value)}
+              label="Hide my phone number"
+              hint="Buyers reach you via in-app chat or a private callback request instead."
+            />
+          </div>
+
+          {!form.hidePhone && (
+            <div className="field">
+              <label className="field__label" htmlFor="s-phone">
+                Contact number
+              </label>
+              <input
+                id="s-phone"
+                className="input"
+                value={form.phone}
+                onChange={(event) => set('phone', event.target.value)}
+                placeholder="+91 98765 43210"
+              />
+              <span className="field__hint">Shown publicly on your listing. Turn on masking to keep it private.</span>
+            </div>
+          )}
+
+          <div className="divider" />
+
+          <div className="panel" style={{ marginBottom: 0 }}>
+            <div className="panel__title">Review</div>
+            <div className="meta-list">
+              <div className="meta-item">
+                <span>Category</span>
+                <b>{CATEGORY_MAP[form.categoryId]?.name ?? '—'}</b>
+              </div>
+              <div className="meta-item">
+                <span>Subcategory</span>
+                <b>{subs.find((s) => s.id === form.subCategoryId)?.name ?? '—'}</b>
+              </div>
+              <div className="meta-item">
+                <span>Price</span>
+                <b>{form.price ? `₹${Number(form.price).toLocaleString('en-IN')}` : 'Ask price'}</b>
+              </div>
+              <div className="meta-item">
+                <span>Video</span>
+                <b>{video && limits.videos > 0 ? providerLabel(video.provider) : 'None'}</b>
+              </div>
+              <div className="meta-item">
+                <span>Photos</span>
+                <b>{form.photos.length}</b>
+              </div>
+              <div className="meta-item">
+                <span>Phone</span>
+                <b>{form.hidePhone ? 'Masked' : form.phone || '—'}</b>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+
+      {error && (
+        <div className="field__error" style={{ marginTop: 14 }}>
+          {error}
+        </div>
+      )}
+    </Modal>
+  );
+}

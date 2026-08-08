@@ -1,0 +1,56 @@
+{
+  "name": "EXY — Visual Classifieds Marketplace",
+  "short_name": "EXY",
+  "description": "Universal visual classifieds marketplace indexing goods, services, materials and businesses advertised on Instagram Reels, YouTube Shorts, Facebook Reels and TikTok.",
+  "id": "/",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
+  "orientation": "portrait-primary",
+  "background_color": "#fbf7f2",
+  "theme_color": "#f2713a",
+  "lang": "en-IN",
+  "dir": "ltr",
+  "categories": ["shopping", "business", "lifestyle"],
+  "icons": [
+    {
+      "src": "/icon-192.svg",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-maskable.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Post a listing",
+      "short_name": "Sell",
+      "description": "Publish a new ad with a video embed",
+      "url": "/?action=sell"
+    },
+    {
+      "name": "Saved ads",
+      "short_name": "Saved",
+      "description": "Open your saved listings",
+      "url": "/?action=saved"
+    },
+    {
+      "name": "Browse marketplace",
+      "short_name": "Browse",
+      "description": "Explore every category",
+      "url": "/?action=browse"
+    }
+  ]
+}
