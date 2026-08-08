@@ -4891,3 +4891,82 @@ ul {
     font-size: 11.5px;
   }
 }
+
+/* ==========================================================================
+   Feature 3 - private seller history suggestions (additive layer)
+   ========================================================================== */
+.hist {
+  margin-top: 8px;
+}
+
+.hist__label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--ink-3);
+  margin-bottom: 7px;
+}
+
+.hist__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.hist__chip {
+  display: inline-flex;
+  align-items: stretch;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--line-2);
+  background: var(--surface-2);
+  overflow: hidden;
+  max-width: 100%;
+  transition: border-color 0.16s var(--ease);
+}
+
+.hist__chip:hover {
+  border-color: var(--accent);
+}
+
+.hist__pick {
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-2);
+  text-align: left;
+  max-width: 260px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.hist__pick:hover {
+  color: var(--accent);
+}
+
+.hist__del {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  color: var(--ink-3);
+  border-left: 1px solid var(--line);
+  transition: color 0.16s var(--ease), background 0.16s var(--ease);
+}
+
+.hist__del:hover {
+  color: var(--danger);
+  background: var(--danger-soft);
+}
+
+/* Location memory row */
+.loc-memory {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}

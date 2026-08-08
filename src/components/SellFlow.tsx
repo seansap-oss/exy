@@ -5,9 +5,11 @@ import { parseVideoUrl, providerLabel } from '../lib/embeds';
 import { TIER_LIMITS } from '../lib/payments';
 import { uid } from '../lib/storage';
 import { MediaUploader } from './MediaUploader';
+import { HistorySuggest } from './HistorySuggest';
+import { readLastLocation, rememberText, requestCurrentLocation, writeLastLocation, clearLastLocation } from '../lib/sellerMemory';
 import { Modal, Switch } from './Ui';
 import { VideoEmbed } from './VideoEmbed';
-import { IconCheck, IconLock, IconUpload, IconVideo } from './Icons';
+import { IconCheck, IconLock, IconPin, IconUpload, IconVideo } from './Icons';
 
 const SWATCHES = [
   'linear-gradient(135deg,#fde68a,#f2713a)',
@@ -42,8 +44,8 @@ export function SellFlow({ open, onClose, profile, activeAdCount, onPublish, onU
     categoryId: '',
     subCategoryId: '',
     condition: 'new' as ListingCondition,
-    city: '',
-    location: '',
+    city: readLastLocation()?.city ?? '',
+    location: readLastLocation()?.area ?? '',
     videoUrl: '',
     photos: [SWATCHES[0]] as string[],
     hidePhone: false,
@@ -122,6 +124,12 @@ export function SellFlow({ open, onClose, profile, activeAdCount, onPublish, onU
       hidePhone: form.hidePhone,
       status: 'active',
     };
+    // Feature 2 + 3 - remember what the seller used.
+    writeLastLocation(listing.city, form.location, profile.id);
+    rememberText('location', listing.city, profile.id);
+    if (listing.description) rememberText('description', listing.description, profile.id);
+    listing.features.forEach((feature) => rememberText('phrase', feature, profile.id));
+
     onPublish(listing);
     setStep(0);
     setForm({
@@ -133,8 +141,8 @@ export function SellFlow({ open, onClose, profile, activeAdCount, onPublish, onU
       categoryId: '',
       subCategoryId: '',
       condition: 'new',
-      city: '',
-      location: '',
+      city: readLastLocation()?.city ?? '',
+      location: readLastLocation()?.area ?? '',
       videoUrl: '',
       photos: [SWATCHES[0]],
       hidePhone: false,
@@ -282,6 +290,13 @@ export function SellFlow({ open, onClose, profile, activeAdCount, onPublish, onU
               onChange={(event) => set('description', event.target.value)}
               placeholder="Describe condition, quantity, delivery terms and what makes your offer better."
             />
+            <HistorySuggest
+              type="description"
+              value={form.description}
+              onPick={(text) => set('description', text)}
+              profileId={profile.id}
+              label="Previous descriptions"
+            />
           </div>
           <div className="form-grid">
             <div className="field">
@@ -322,6 +337,42 @@ export function SellFlow({ open, onClose, profile, activeAdCount, onPublish, onU
                 value={form.city}
                 onChange={(event) => set('city', event.target.value)}
                 placeholder="Bengaluru"
+              />
+              {/* Feature 2 — location memory controls */}
+              <div className="loc-memory">
+                <button
+                  type="button"
+                  className="chip chip--sm"
+                  onClick={async () => {
+                    const position = await requestCurrentLocation();
+                    if (!position) return onToast('Location permission denied or unavailable.', 'err');
+                    set('location', `Near ${position.latitude.toFixed(3)}, ${position.longitude.toFixed(3)}`);
+                    onToast('Current location captured.', 'ok');
+                  }}
+                >
+                  <IconPin size={12} /> Use current location
+                </button>
+                {form.city && (
+                  <button
+                    type="button"
+                    className="chip chip--sm"
+                    onClick={() => {
+                      set('city', '');
+                      set('location', '');
+                      clearLastLocation(profile.id);
+                      onToast('Saved location cleared.', 'info');
+                    }}
+                  >
+                    Clear saved location
+                  </button>
+                )}
+              </div>
+              <HistorySuggest
+                type="location"
+                value={form.city}
+                onPick={(text) => set('city', text)}
+                profileId={profile.id}
+                label="Recent locations"
               />
             </div>
             <div className="field">

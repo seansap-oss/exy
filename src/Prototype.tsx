@@ -41,6 +41,8 @@ import {
 } from './lib/messaging';
 import { isSupabaseLive } from './lib/supabase';
 import { useAndroidBack } from './hooks/useAndroidBack';
+import { fetchListings, patchListing, publishListing, removeListing, subscribeListings } from './lib/listingsStore';
+import { syncHistoryFromRemote } from './lib/sellerMemory';
 import { TickerTape } from './components/TickerTape';
 import { SearchModal } from './components/SearchModal';
 import { AuthModal } from './components/AuthModal';
@@ -160,6 +162,31 @@ export default function Prototype() {
   }, []);
 
   /**
+   * Live feed sync. When Supabase is configured the listings table is the
+   * source of truth; Realtime pushes new posts (including Super-Admin ones)
+   * without a manual refresh. Falls back to the local seed when offline.
+   */
+  const reloadListings = useCallback(async () => {
+    const { listings: remote, error } = await fetchListings();
+    if (error) {
+      console.warn('[EXY] feed load failed:', error);
+      return;
+    }
+    if (remote) setListings(remote);
+  }, []);
+
+  useEffect(() => {
+    void reloadListings();
+    const unsubscribe = subscribeListings(() => void reloadListings());
+    return unsubscribe;
+  }, [reloadListings]);
+
+  /** Pull the signed-in seller's private text history into the local cache. */
+  useEffect(() => {
+    if (profile?.id) void syncHistoryFromRemote(profile.id);
+  }, [profile?.id]);
+
+  /**
    * Ticker live sync — hydrate from Supabase on mount, then listen for admin
    * edits (same tab), other tabs, and Realtime row changes so the live bar
    * updates instantly without a refresh.
@@ -203,6 +230,12 @@ export default function Prototype() {
     () => Object.fromEntries(listings.map((listing) => [listing.id, listing])) as Record<string, Listing>,
     [listings],
   );
+  // Fresh map for fire-and-forget counter writes without re-creating callbacks.
+  const listingMapRef = useRef(listingMap);
+  useEffect(() => {
+    listingMapRef.current = listingMap;
+  }, [listingMap]);
+
   const cities = useMemo(() => Array.from(new Set(listings.map((listing) => listing.city))).sort(), [listings]);
   const myListings = useMemo(
     () => (profile ? listings.filter((listing) => listing.sellerId === profile.id) : []),
@@ -292,6 +325,7 @@ export default function Prototype() {
     (id: string) => {
       setListings((prev) => prev.map((l) => (l.id === id ? { ...l, clickCount: l.clickCount + 1 } : l)));
       recordEvent(id, 'click');
+      patchListing(id, { click_count: (listingMapRef.current[id]?.clickCount ?? 0) + 1 });
       go({ name: 'listing', id });
     },
     [go, recordEvent],
@@ -303,6 +337,10 @@ export default function Prototype() {
         prev.map((l) => (l.id === id ? { ...l, viewCount: l.viewCount + 1, todayViews: l.todayViews + 1 } : l)),
       );
       recordEvent(id, 'view', dwellSec);
+      patchListing(id, {
+        view_count: (listingMapRef.current[id]?.viewCount ?? 0) + 1,
+        today_views: (listingMapRef.current[id]?.todayViews ?? 0) + 1,
+      });
     },
     [recordEvent],
   );
@@ -464,11 +502,22 @@ export default function Prototype() {
 
   const onPublish = useCallback(
     (listing: Listing) => {
+      // Optimistic insert so the UI stays responsive.
       setListings((prev) => [listing, ...prev]);
-      toast('Listing published and live', 'ok');
       go({ name: 'profile', tab: 'ads' });
+
+      void publishListing(listing).then(({ ok, id, error }) => {
+        if (ok) {
+          toast(id ? 'Listing published and live' : 'Listing published', 'ok');
+          void reloadListings();
+        } else {
+          // Never claim success on a failed write.
+          setListings((prev) => prev.filter((item) => item.id !== listing.id));
+          toast(`Publish failed: ${error ?? 'unknown error'}`, 'err');
+        }
+      });
     },
-    [go, toast],
+    [go, toast, reloadListings],
   );
 
   function handleSellClick() {
@@ -696,6 +745,7 @@ export default function Prototype() {
             onUpdateListings={setListings}
             onUpdateSellers={setSellers}
             onUpdateProfile={updateProfile}
+            onDeleteListing={removeListing}
             onToast={toast}
           />
         )}
@@ -1977,6 +2027,7 @@ function ProfileView({
   onUpdateListings,
   onUpdateSellers,
   onUpdateProfile,
+  onDeleteListing,
   onToast,
 }: {
   profile: Profile | null;
@@ -1998,6 +2049,7 @@ function ProfileView({
   onUpdateListings: React.Dispatch<React.SetStateAction<Listing[]>>;
   onUpdateSellers: React.Dispatch<React.SetStateAction<Seller[]>>;
   onUpdateProfile: (patch: Partial<Profile>) => void;
+  onDeleteListing: (id: string) => void;
   onToast: (text: string, kind?: ToastMsg['kind']) => void;
 }) {
   if (!profile) {
@@ -2190,6 +2242,7 @@ function ProfileView({
                             className="btn btn--danger btn--sm"
                             onClick={() => {
                               onUpdateListings((prev) => prev.filter((item) => item.id !== listing.id));
+                              onDeleteListing(listing.id);
                               onToast('Listing deleted', 'info');
                             }}
                           >

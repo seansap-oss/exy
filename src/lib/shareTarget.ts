@@ -66,3 +66,37 @@ export function clearShareParams(): void {
   if (typeof window === 'undefined') return;
   window.history.replaceState({}, '', '/');
 }
+
+/* -------------------------------------------------------------------------- */
+/* Shared-URL durability                                                       */
+/* -------------------------------------------------------------------------- */
+const PENDING_KEY = 'exy.v2.pendingShareUrl';
+
+/**
+ * Holds the shared URL outside React state so it survives a drawer remount,
+ * an auth round-trip or an accidental reload while the form is open.
+ * sessionStorage is deliberate: it must not leak into a later session.
+ */
+export function keepSharedUrl(url: string): void {
+  try {
+    if (url) sessionStorage.setItem(PENDING_KEY, url);
+  } catch {
+    /* private mode */
+  }
+}
+
+export function recoverSharedUrl(): string {
+  try {
+    return sessionStorage.getItem(PENDING_KEY) ?? '';
+  } catch {
+    return '';
+  }
+}
+
+export function releaseSharedUrl(): void {
+  try {
+    sessionStorage.removeItem(PENDING_KEY);
+  } catch {
+    /* ignore */
+  }
+}

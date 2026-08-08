@@ -1,6 +1,8 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Listing, Profile } from '../types';
-import type { SharePayload } from '../lib/shareTarget';
+import { keepSharedUrl, recoverSharedUrl, releaseSharedUrl, type SharePayload } from '../lib/shareTarget';
+import { readLastLocation, rememberText, writeLastLocation } from '../lib/sellerMemory';
+import { HistorySuggest } from './HistorySuggest';
 import { CATEGORIES } from '../data/categories';
 import { parseVideoUrl, providerLabel } from '../lib/embeds';
 import { TIER_LIMITS } from '../lib/payments';
@@ -31,13 +33,43 @@ export function ExpressPostDrawer({ payload, profile, onClose, onPublish, onNeed
   const [city, setCity] = useState('');
   const [error, setError] = useState('');
 
+  /**
+   * Feature 1 — seed the form exactly once per shared payload.
+   *
+   * Previously this effect keyed on the `payload` object identity, so any
+   * parent re-render produced a new object, re-ran the effect and wiped
+   * whatever the user had typed — including the URL. It now keys on a stable
+   * content signature and never overwrites a field with an empty value, so a
+   * failed thumbnail/caption extraction leaves the URL intact.
+   */
+  const seededRef = useRef<string | null>(null);
+
   useEffect(() => {
     if (!payload) return;
-    setUrl(payload.url);
-    setDescription(payload.caption);
-    setTitle(payload.caption.split('\n')[0]?.slice(0, 80) ?? '');
+    const signature = `${payload.url}::${payload.title}::${payload.text}`;
+    if (seededRef.current === signature) return;
+    seededRef.current = signature;
+
+    const incoming = payload.url || payload.video?.url || recoverSharedUrl() || '';
+    if (incoming) {
+      setUrl(incoming);
+      keepSharedUrl(incoming);
+    }
+    if (payload.caption) {
+      setDescription(payload.caption);
+      setTitle(payload.caption.split('\n')[0]?.slice(0, 80) ?? '');
+    }
+    if (!city) {
+      const remembered = readLastLocation();
+      if (remembered?.city) setCity(remembered.city);
+    }
     setError('');
-  }, [payload]);
+  }, [payload, city]);
+
+  // Survive a drawer remount or an accidental reload mid-form.
+  useEffect(() => {
+    if (url) keepSharedUrl(url);
+  }, [url]);
 
   const video = useMemo(() => parseVideoUrl(url), [url]);
   const subs = CATEGORIES.find((category) => category.id === categoryId)?.children ?? [];
@@ -81,6 +113,12 @@ export function ExpressPostDrawer({ payload, profile, onClose, onPublish, onNeed
       status: 'active',
     };
 
+    // Feature 2 + 3 — remember what the seller actually used.
+    writeLastLocation(listing.city, '', profile.id);
+    rememberText('location', listing.city, profile.id);
+    if (listing.description) rememberText('description', listing.description, profile.id);
+
+    releaseSharedUrl();
     onPublish(listing);
     onClose();
   }
@@ -165,6 +203,13 @@ export function ExpressPostDrawer({ payload, profile, onClose, onPublish, onNeed
                 onChange={(event) => setCity(event.target.value)}
                 placeholder="Bengaluru"
               />
+              <HistorySuggest
+                type="location"
+                value={city}
+                onPick={setCity}
+                profileId={profile?.id}
+                label="Recent locations"
+              />
             </div>
           </div>
 
@@ -213,6 +258,13 @@ export function ExpressPostDrawer({ payload, profile, onClose, onPublish, onNeed
               style={{ minHeight: 84 }}
               value={description}
               onChange={(event) => setDescription(event.target.value)}
+            />
+            <HistorySuggest
+              type="description"
+              value={description}
+              onPick={setDescription}
+              profileId={profile?.id}
+              label="Previous descriptions"
             />
           </div>
 
