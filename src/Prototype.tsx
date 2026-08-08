@@ -544,14 +544,8 @@ export default function Prototype() {
 
         {route.name === 'feed' && (
           <div className="shell">
-            <div className="section__head" style={{ paddingTop: 22 }}>
-              <div>
-                <h2 className="section__title">Visual feed</h2>
-                <p className="section__sub">
-                  Swipe or use ↑ ↓. Video plays muted — tap the sound button to hear it, tap the card again for the
-                  immersive 9:16 player.
-                </p>
-              </div>
+            <div className="feed-bar">
+              <h2 className="feed-bar__title">Visual Feed</h2>
               <button className="btn btn--ghost btn--sm" onClick={() => go({ name: 'browse' })}>
                 <IconGrid size={15} /> Grid view
               </button>

@@ -33,7 +33,7 @@ interface Props {
 
 /**
  * Module 6.2 — cascading card stack.
- * Renders the active slide plus 3 stacked behind it to convey depth.
+ * Horizontal snap carousel of 9:16 video cards.
  * Native video autoplays muted; the mute toggle (bottom-right) enables audio.
  * A second interaction opens the immersive 9:16 fullscreen player.
  */
@@ -55,11 +55,11 @@ export function VisualFeed({
   const [index, setIndex] = useState(initial);
   const [muted, setMuted] = useState(true);
   const [started, setStarted] = useState(false);
-  const [drag, setDrag] = useState(0);
 
   const dwellRef = useRef<{ id: string; at: number } | null>(null);
   const countedRef = useRef<Set<string>>(new Set());
-  const pointerRef = useRef<{ x: number; y: number } | null>(null);
+  const trackRef = useRef<HTMLDivElement>(null);
+  const scrollTimer = useRef<number | null>(null);
 
   const active = deck[index];
 
@@ -86,18 +86,57 @@ export function VisualFeed({
   useEffect(() => () => flushDwell(), [flushDwell]);
 
   /* -------------------------------- navigation -------------------------------- */
+  /** Scrolls the rail so the requested slide lands centred. */
+  const scrollTo = useCallback((target: number, behavior: ScrollBehavior = 'smooth') => {
+    const track = trackRef.current;
+    if (!track) return;
+    const slide = track.children[target] as HTMLElement | undefined;
+    if (!slide) return;
+    track.scrollTo({ left: slide.offsetLeft - (track.clientWidth - slide.clientWidth) / 2, behavior });
+  }, []);
+
   const step = useCallback(
     (delta: number) => {
-      setIndex((prev) => Math.min(deck.length - 1, Math.max(0, prev + delta)));
-      setDrag(0);
+      setIndex((prev) => {
+        const next = Math.min(deck.length - 1, Math.max(0, prev + delta));
+        scrollTo(next);
+        return next;
+      });
     },
-    [deck.length],
+    [deck.length, scrollTo],
   );
+
+  /** Derives the active index from the nearest slide to the rail's centre. */
+  const onTrackScroll = useCallback(() => {
+    if (scrollTimer.current) window.clearTimeout(scrollTimer.current);
+    scrollTimer.current = window.setTimeout(() => {
+      const track = trackRef.current;
+      if (!track) return;
+      const centre = track.scrollLeft + track.clientWidth / 2;
+      let nearest = 0;
+      let best = Infinity;
+      Array.from(track.children).forEach((node, position) => {
+        const slide = node as HTMLElement;
+        const distance = Math.abs(slide.offsetLeft + slide.clientWidth / 2 - centre);
+        if (distance < best) {
+          best = distance;
+          nearest = position;
+        }
+      });
+      setIndex((prev) => (prev === nearest ? prev : nearest));
+    }, 90);
+  }, []);
+
+  // Land on the requested start card without animating on first paint.
+  useEffect(() => {
+    if (initial > 0) scrollTo(initial, 'auto');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'ArrowDown' || event.key === 'ArrowRight') step(1);
-      if (event.key === 'ArrowUp' || event.key === 'ArrowLeft') step(-1);
+      if (event.key === 'ArrowRight') step(1);
+      if (event.key === 'ArrowLeft') step(-1);
       if (event.key === 'm') setMuted((prev) => !prev);
     };
     window.addEventListener('keydown', onKey);
@@ -115,42 +154,23 @@ export function VisualFeed({
     );
   }
 
-  const stack = deck.slice(index, index + 4);
-
   return (
     <div className="feed">
       <div className="feed__stage">
-        <div
-          className="feed__stack"
-          onPointerDown={(event) => {
-            pointerRef.current = { x: event.clientX, y: event.clientY };
-          }}
-          onPointerMove={(event) => {
-            if (!pointerRef.current) return;
-            setDrag(event.clientY - pointerRef.current.y);
-          }}
-          onPointerUp={() => {
-            if (Math.abs(drag) > 70) step(drag < 0 ? 1 : -1);
-            else setDrag(0);
-            pointerRef.current = null;
-          }}
-          onPointerLeave={() => {
-            setDrag(0);
-            pointerRef.current = null;
-          }}
-        >
-          {stack
-            .map((listing, depth) => ({ listing, depth }))
-            .reverse()
-            .map(({ listing, depth }) => (
+        {/*
+          Horizontal snap carousel. Native scroll-snap does the work, so page
+          scrolling is never blocked: vertical drags bubble to the document,
+          horizontal drags pan the rail.
+        */}
+        <div className="feed__track swipe-x" ref={trackRef} onScroll={onTrackScroll}>
+          {deck.map((listing, position) => (
+            <div className="feed__slide" key={listing.id} data-index={position}>
               <FeedCard
-                key={listing.id}
                 listing={listing}
                 seller={sellerMap[listing.sellerId]}
-                depth={depth}
-                drag={depth === 0 ? drag : 0}
                 muted={muted}
-                started={started && depth === 0}
+                started={started && position === index}
+                active={position === index}
                 saved={saved.includes(listing.id)}
                 onStart={() => setStarted(true)}
                 onExpand={() => onExpand(listing)}
@@ -158,7 +178,8 @@ export function VisualFeed({
                 onDetails={() => onOpenListing(listing.id)}
                 onContact={() => onContact(listing.id)}
               />
-            ))}
+            </div>
+          ))}
         </div>
 
         <div className="feed__rail">
@@ -205,10 +226,9 @@ export function VisualFeed({
 function FeedCard({
   listing,
   seller,
-  depth,
-  drag,
   muted,
   started,
+  active,
   saved,
   onStart,
   onExpand,
@@ -218,9 +238,9 @@ function FeedCard({
 }: {
   listing: Listing;
   seller?: Seller;
-  depth: number;
-  drag: number;
   muted: boolean;
+  /** Centred slide drives playback. */
+  active: boolean;
   started: boolean;
   saved: boolean;
   onStart: () => void;
@@ -231,7 +251,7 @@ function FeedCard({
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const nativeVideo = listing.media?.find((item) => item.kind === 'video');
-  const isTop = depth === 0;
+  const isTop = active;
 
   useEffect(() => {
     const element = videoRef.current;
@@ -244,15 +264,7 @@ function FeedCard({
   const poster = nativeVideo?.poster ?? listing.video?.poster;
 
   return (
-    <article
-      className={`feed-card${isTop ? ' is-top' : ''}`}
-      style={{
-        transform: `translate3d(0, ${depth * -14 + (isTop ? drag * 0.35 : 0)}px, 0) scale(${1 - depth * 0.045})`,
-        opacity: depth > 2 ? 0 : 1 - depth * 0.12,
-        zIndex: 10 - depth,
-        pointerEvents: isTop ? 'auto' : 'none',
-      }}
-    >
+    <article className={`feed-card${isTop ? ' is-top' : ''}`}>
       <div className="feed-card__media">
         {nativeVideo ? (
           <video

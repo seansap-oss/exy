@@ -13,7 +13,7 @@
   --r-xl: 32px;
   --r-pill: 999px;
   --header-h: 68px;
-  --nav-h: 64px;
+  --nav-h: 56px;
   --ease: cubic-bezier(0.22, 1, 0.36, 1);
   --font: 'Inter', 'Segoe UI', system-ui, -apple-system, 'Helvetica Neue', sans-serif;
 }
@@ -2603,12 +2603,21 @@ ul {
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 3px;
-    font-size: 10.5px;
+    gap: 2px;
+    /* Compact Instagram-style proportions */
+    padding: 5px 0;
+    font-size: 10px;
+    line-height: 1.1;
     font-weight: 700;
     color: var(--ink-3);
     transition: color 0.16s var(--ease);
     position: relative;
+  }
+
+  /* Icons scale to 22px inside the compact bar without touching the JSX. */
+  .bottom-nav__item > svg {
+    width: 22px;
+    height: 22px;
   }
 
   .bottom-nav__item.is-on {
@@ -2616,20 +2625,21 @@ ul {
   }
 
   .bottom-nav__sell {
-    flex: 0 0 76px;
+    flex: 0 0 68px;
+    padding: 0;
   }
 
   .bottom-nav__sell-orb {
-    width: 54px;
-    height: 54px;
+    width: 50px;
+    height: 50px;
     border-radius: 50%;
     display: grid;
     place-items: center;
     background: linear-gradient(140deg, var(--accent), var(--accent-2));
     color: var(--accent-ink);
     box-shadow: 0 6px 20px color-mix(in srgb, var(--accent) 46%, transparent);
-    margin-top: -22px;
-    border: 4px solid var(--surface);
+    margin-top: -18px;
+    border: 3px solid var(--surface);
     transition: transform 0.18s var(--ease);
   }
 
@@ -3006,43 +3016,64 @@ ul {
    ========================================================================== */
 .feed {
   position: relative;
-  padding: 24px 0 40px;
+  padding: 6px 0 20px;
+  /* Rail bleeds to the viewport edge; cancel the shell gutter. */
+  margin-inline: calc(var(--gutter) * -1);
 }
 
 .feed__stage {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 16px;
+  gap: 10px;
 }
 
-.feed__stack {
-  position: relative;
-  width: min(420px, 92vw);
-  aspect-ratio: 9 / 16;
-  max-height: 74vh;
-  touch-action: pan-x;
-  user-select: none;
+/* Horizontal snap carousel — replaces the former absolute card stack. */
+.feed__track {
+  display: flex;
+  gap: 12px;
+  width: 100%;
+  padding: 4px 16px 12px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-snap-type: x mandatory;
+  scroll-padding-inline: 16px;
+  scrollbar-width: none;
+  /* pan-y kept so vertical drags still scroll the page. */
+  touch-action: pan-x pan-y;
+  overscroll-behavior-x: contain;
+}
+
+.feed__track::-webkit-scrollbar {
+  display: none;
+}
+
+.feed__slide {
+  flex: 0 0 auto;
+  width: min(82vw, 330px);
+  aspect-ratio: 9 / 14;
+  scroll-snap-align: center;
+  scroll-snap-stop: always;
 }
 
 .feed-card {
-  position: absolute;
-  inset: 0;
+  position: relative;
+  width: 100%;
+  height: 100%;
   border-radius: var(--r-xl);
   overflow: hidden;
   background: #0b0b0b;
   box-shadow: var(--shadow-lg);
   transition: transform 0.34s var(--ease), opacity 0.34s var(--ease);
-  will-change: transform;
+  opacity: 0.62;
 }
 
+/* Centred slide is emphasised. */
 .feed-card.is-top {
-  cursor: grab;
+  opacity: 1;
 }
 
-.feed-card.is-top:active {
-  cursor: grabbing;
-}
+
 
 .feed-card__media {
   position: absolute;
@@ -4806,5 +4837,57 @@ ul {
   /* Override the older 2-column rule */
   .cat-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+/* ==========================================================================
+   Feed page — compact control row
+   ========================================================================== */
+.feed-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 0 10px;
+}
+
+.feed-bar__title {
+  font-size: clamp(18px, 2.2vw, 22px);
+  font-weight: 800;
+  letter-spacing: -0.7px;
+  margin: 0;
+}
+
+/* Mobile feed sizing — card must clear the compact footer. */
+@media (max-width: 760px) {
+  .feed-bar {
+    padding: 10px 0 8px;
+  }
+
+  .feed {
+    padding: 4px 0 12px;
+  }
+
+  .feed__slide {
+    width: min(82vw, 330px);
+    aspect-ratio: 9 / 14;
+    /* Never taller than the space between the control row and the footer. */
+    max-height: calc(100svh - var(--header-h) - var(--nav-h) - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 148px);
+  }
+
+  .feed__rail {
+    gap: 10px;
+  }
+
+  .feed__nav {
+    width: 36px;
+    height: 36px;
+  }
+
+  /* Sound pill clears the compact footer. */
+  .feed__mute {
+    bottom: calc(var(--nav-h) + env(safe-area-inset-bottom, 0px) + 12px);
+    padding: 8px 13px;
+    font-size: 11.5px;
   }
 }
