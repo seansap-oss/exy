@@ -195,6 +195,8 @@ ul {
   position: sticky;
   top: 0;
   z-index: 60;
+  /* Clears the camera notch / status bar on native. */
+  padding-top: env(safe-area-inset-top, 0px);
   background: color-mix(in srgb, var(--surface) 86%, transparent);
   backdrop-filter: saturate(180%) blur(16px);
   border-bottom: 1px solid var(--line);
@@ -2561,7 +2563,12 @@ ul {
   }
 
   .main {
-    padding-bottom: calc(var(--nav-h) + 28px);
+    padding-bottom: calc(var(--nav-h) + env(safe-area-inset-bottom, 0px) + 28px);
+  }
+
+  /* Detail pages carry a second sticky bar — reserve room for both. */
+  .app:has(.contact-bar) .main {
+    padding-bottom: calc(var(--nav-h) + env(safe-area-inset-bottom, 0px) + 90px);
   }
 
   .toast-stack {
@@ -2713,13 +2720,14 @@ ul {
     position: fixed;
     left: 0;
     right: 0;
-    bottom: var(--nav-h);
-    z-index: 80;
+    bottom: calc(var(--nav-h) + env(safe-area-inset-bottom, 0px));
+    /* Above the bottom nav (90) so the lead CTA is never clipped. */
+    z-index: 95;
     gap: 10px;
-    padding: 11px 14px calc(11px + env(safe-area-inset-bottom, 0px));
+    padding: 11px 14px;
     background: var(--surface);
     border-top: 1px solid var(--line);
-    box-shadow: 0 -6px 24px rgba(0, 0, 0, 0.08);
+    box-shadow: 0 -6px 24px rgba(0, 0, 0, 0.28);
   }
 
   .contact-bar .btn {
@@ -4581,4 +4589,222 @@ ul {
 
 .save-bar__state.is-clean {
   color: var(--ink-3);
+}
+
+/* ==========================================================================
+   Swipeable reel hero carousel
+   ========================================================================== */
+.reel-rail {
+  display: flex;
+  gap: 10px;
+  margin-top: 18px;
+  padding: 2px 0 8px;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+}
+
+.reel-rail::-webkit-scrollbar {
+  display: none;
+}
+
+.reel-card {
+  position: relative;
+  flex: 0 0 auto;
+  width: 112px;
+  height: 176px;
+  border-radius: 14px;
+  overflow: hidden;
+  scroll-snap-align: start;
+  box-shadow: var(--shadow-md);
+  border: 1px solid var(--line);
+  background: var(--surface-3);
+  transition: transform 0.2s var(--ease);
+}
+
+.reel-card:active {
+  transform: scale(0.97);
+}
+
+.reel-card__media {
+  position: absolute;
+  inset: 0;
+  background-size: cover;
+  background-position: center;
+}
+
+.reel-card__media::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.88) 0%, rgba(0, 0, 0, 0.1) 52%, rgba(0, 0, 0, 0.3) 100%);
+}
+
+.reel-card__plays {
+  position: absolute;
+  top: 7px;
+  left: 7px;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 7px;
+  border-radius: var(--r-pill);
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(6px);
+  color: #fff;
+  font-size: 9.5px;
+  font-weight: 800;
+}
+
+.reel-card__foot {
+  position: absolute;
+  inset: auto 0 0 0;
+  z-index: 2;
+  padding: 8px 9px;
+  text-align: left;
+  color: #fff;
+}
+
+.reel-card__foot b {
+  display: block;
+  font-size: 12.5px;
+  font-weight: 800;
+  letter-spacing: -0.3px;
+  color: var(--accent-2);
+}
+
+.reel-card__foot span {
+  display: block;
+  font-size: 10px;
+  opacity: 0.86;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Short labels only surface on narrow screens */
+.hero__act-short {
+  display: none;
+}
+
+/* ==========================================================================
+   Mobile composition — hero tightening + 3-column categories
+   ========================================================================== */
+@media (max-width: 760px) {
+  .hero {
+    padding: 18px 0 22px;
+  }
+
+  .hero__grid {
+    gap: 18px;
+  }
+
+  .hero__eyebrow {
+    margin-bottom: 12px;
+    padding: 4px 11px 4px 6px;
+    font-size: 10.5px;
+  }
+
+  .hero__title {
+    font-size: clamp(26px, 8vw, 34px);
+    letter-spacing: -1.3px;
+    line-height: 1.08;
+  }
+
+  .hero__sub {
+    margin-top: 10px;
+    font-size: 14px;
+    line-height: 1.55;
+  }
+
+  /* Single compact flex row — no wrapping */
+  .hero__cta {
+    margin-top: 16px;
+    display: flex;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    gap: 8px;
+    width: 100%;
+  }
+
+  .hero__act {
+    flex: 1 1 0;
+    min-width: 0;
+    height: 40px;
+    padding: 0 10px;
+    font-size: 12px;
+    gap: 5px;
+  }
+
+  .hero__act-full {
+    display: none;
+  }
+
+  .hero__act-short {
+    display: inline;
+  }
+
+  .hero__stats {
+    margin-top: 20px;
+    gap: 18px;
+  }
+
+  .hero__media {
+    display: none;
+  }
+
+  .reel-card {
+    width: 108px;
+    height: 170px;
+  }
+
+  /* 3-column dense category grid */
+  .cat-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .cat-card {
+    padding: 10px 6px 9px;
+    gap: 7px;
+    border-radius: 12px;
+    min-width: 0;
+  }
+
+  .cat-orb {
+    width: 40px;
+    height: 40px;
+  }
+
+  /* Keep the mandated 200% glyph scale at the smaller orb size */
+  .cat-orb__glyph svg {
+    width: 20px;
+    height: 20px;
+  }
+
+  .cat-card__name {
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1.25;
+    width: 100%;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .cat-card__count {
+    font-size: 9.5px;
+  }
+
+  .section {
+    padding-top: 26px;
+  }
+}
+
+@media (max-width: 460px) {
+  /* Override the older 2-column rule */
+  .cat-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
 }

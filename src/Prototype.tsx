@@ -40,6 +40,7 @@ import {
   writeThreads,
 } from './lib/messaging';
 import { isSupabaseLive } from './lib/supabase';
+import { useAndroidBack } from './hooks/useAndroidBack';
 import { TickerTape } from './components/TickerTape';
 import { SearchModal } from './components/SearchModal';
 import { AuthModal } from './components/AuthModal';
@@ -82,6 +83,7 @@ import {
   IconMoon,
   IconPhone,
   IconPin,
+  IconPlay,
   IconPlus,
   IconSearch,
   IconSettings,
@@ -179,7 +181,6 @@ export default function Prototype() {
     setTicker(next);
     void persistTicker(next);
   }, []);
-
   /* Module 2.1 — a Reel shared into EXY opens the Express Post Drawer. */
   useEffect(() => {
     if (!isShareLaunch()) return;
@@ -217,7 +218,54 @@ export default function Prototype() {
   );
 
   /* --------------------------------- actions --------------------------------- */
-  const go = useCallback((next: Route) => setRoute(next), []);
+  /** In-app route history so the hardware back button can pop one step. */
+  const historyRef = useRef<Route[]>([]);
+
+  const go = useCallback((next: Route) => {
+    setRoute((prev) => {
+      if (JSON.stringify(prev) !== JSON.stringify(next)) {
+        historyRef.current = [...historyRef.current, prev].slice(-30);
+      }
+      return next;
+    });
+  }, []);
+
+  /** Pops one step. Returns false when already at the root home view. */
+  const popRoute = useCallback(() => {
+    const stack = historyRef.current;
+    if (stack.length) {
+      historyRef.current = stack.slice(0, -1);
+      setRoute(stack[stack.length - 1]);
+      return true;
+    }
+    if (route.name !== 'home') {
+      setRoute({ name: 'home' });
+      return true;
+    }
+    return false;
+  }, [route.name]);
+
+  /**
+   * Android hardware back button — closes overlays first, then walks the route
+   * stack, then asks for a confirming second press before exiting.
+   */
+  const backLayers = useMemo(
+    () => [
+      () => (fullscreen ? (setFullscreen(null), true) : false),
+      () => (share ? (setShare(null), clearShareParams(), true) : false),
+      () => (checkoutPkg ? (setCheckoutPkg(null), true) : false),
+      () => (sellOpen ? (setSellOpen(false), true) : false),
+      () => (authOpen ? (setAuthOpen(false), true) : false),
+      () => (searchOpen ? (setSearchOpen(false), true) : false),
+    ],
+    [fullscreen, share, checkoutPkg, sellOpen, authOpen, searchOpen],
+  );
+
+  useAndroidBack({
+    layers: backLayers,
+    goBack: popRoute,
+    onConfirmExit: (message) => toast(message, 'info'),
+  });
 
   const requireAuth = useCallback(
     (reason: string, action: 'sell' | 'save' | 'message', target?: string) => {
@@ -753,7 +801,7 @@ export default function Prototype() {
           onCallback={(id) => {
             setFullscreen(null);
             startThread(id);
-            toast('Opening chat � send a private callback request from here.', 'info');
+            toast('Opening chat - send a private callback request from here.', 'info');
           }}
           onToggleSave={toggleSave}
           onQualifiedView={qualifiedView}
@@ -917,6 +965,10 @@ function HomeView({
   const recent = [...active].sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt)).slice(0, 8);
   const trending = [...active].sort((a, b) => b.todayViews - a.todayViews).slice(0, 8);
   const totalViews = active.reduce((sum, l) => sum + l.viewCount, 0);
+  // 10 featured reels for the swipeable hero carousel.
+  const reelRail = [...withVideo]
+    .sort((a, b) => Number(b.featured) - Number(a.featured) || b.viewCount - a.viewCount)
+    .slice(0, 10);
 
   return (
     <>
@@ -933,17 +985,53 @@ function HomeView({
               EXY aggregates goods, services, materials and businesses advertised across Instagram Reels, YouTube
               Shorts and Facebook video — with real prices, verified sellers and in-app messaging.
             </p>
+            {/* Inline action bar — all three fit one row on mobile. */}
             <div className="hero__cta">
-              <button className="btn btn--primary btn--lg" onClick={() => onGo({ name: 'feed' })}>
-                <IconFilm size={17} /> Open visual feed
+              <button className="btn btn--primary btn--lg hero__act" onClick={() => onGo({ name: 'feed' })}>
+                <IconFilm size={17} />
+                <span className="hero__act-full">Open visual feed</span>
+                <span className="hero__act-short">Feed</span>
               </button>
-              <button className="btn btn--ghost btn--lg" onClick={onSearch}>
-                <IconSearch size={17} /> Search marketplace
+              <button className="btn btn--ghost btn--lg hero__act" onClick={onSearch}>
+                <IconSearch size={17} />
+                <span className="hero__act-full">Search marketplace</span>
+                <span className="hero__act-short">Search</span>
               </button>
-              <button className="btn btn--ghost btn--lg" onClick={onSell}>
-                <IconPlus size={17} /> Post listing
+              <button className="btn btn--ghost btn--lg hero__act" onClick={onSell}>
+                <IconPlus size={17} />
+                <span className="hero__act-full">Post listing</span>
+                <span className="hero__act-short">Sell</span>
               </button>
             </div>
+
+            {/* Swipeable reel carousel */}
+            {reelRail.length > 0 && (
+              <div className="reel-rail swipe-x">
+                {reelRail.map((listing) => (
+                  <button
+                    key={listing.id}
+                    className="reel-card"
+                    onClick={() => onGo({ name: 'feed', startId: listing.id })}
+                  >
+                    <span
+                      className="reel-card__media"
+                      style={
+                        listing.video?.poster
+                          ? { backgroundImage: `url(${listing.video.poster})` }
+                          : { background: listing.photos[0] }
+                      }
+                    />
+                    <span className="reel-card__plays">
+                      <IconPlay size={9} /> {compact(listing.viewCount)}
+                    </span>
+                    <span className="reel-card__foot">
+                      <b>{inr(listing.price)}</b>
+                      <span>{listing.city}</span>
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
             <div className="hero__stats">
               <div className="hero__stat">
                 <b>{active.length}</b>
