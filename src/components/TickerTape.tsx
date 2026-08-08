@@ -1,7 +1,7 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import type { Listing, TickerConfig, TickerSegment } from '../types';
 import { inr } from '../lib/format';
-import { heightPreset, isTickerEligible, scrollDuration, TICKER_FONTS } from '../lib/ticker';
+import { DEFAULT_TICKER, heightPreset, isTickerEligible, scrollDuration, TICKER_FONTS } from '../lib/ticker';
 import { IconClose, IconFlame } from './Icons';
 
 /* -------------------------------------------------------------------------- */
@@ -41,7 +41,25 @@ interface Props {
   preview?: boolean;
 }
 
-export function TickerTape({ config, listings, onDismiss, onOpenListing, preview = false }: Props) {
+export function TickerTape({ config: incoming, listings, onDismiss, onOpenListing, preview = false }: Props) {
+  /**
+   * Cosmetic-only dismissal. Toggles a CSS class on this instance; the React
+   * node stays mounted and no global/persisted state is touched.
+   */
+  const [hidden, setHidden] = useState(false);
+
+  /**
+   * Synchronous hard-merge against DEFAULT_TICKER. Guarantees a paintable
+   * config on the very first frame even if the caller passes a partial,
+   * null or async-pending object — nothing waits on Supabase.
+   */
+  const config: TickerConfig = {
+    ...DEFAULT_TICKER,
+    ...(incoming ?? {}),
+    enabled: incoming?.enabled ?? true,
+    segments: incoming?.segments?.length ? incoming.segments : DEFAULT_TICKER.segments,
+  };
+
   const promoted = useMemo(
     () =>
       listings
@@ -50,8 +68,6 @@ export function TickerTape({ config, listings, onDismiss, onOpenListing, preview
         .slice(0, 8),
     [listings, config.minTier],
   );
-
-  if (!config.enabled) return null;
 
   const items: Array<{ key: string; id?: string; node: React.ReactNode }> = config.segments.map((segment) => ({
     key: segment.id,
@@ -80,16 +96,31 @@ export function TickerTape({ config, listings, onDismiss, onOpenListing, preview
     });
   }
 
-  if (!items.length) return null;
+  // Never bail to null — fall back to the default segments so the bar always
+  // has something to paint.
+  const safeItems: typeof items = items.length
+    ? items
+    : DEFAULT_TICKER.segments.map((segment) => ({
+        key: segment.id,
+        node: <SegmentText segment={segment} fallbackColor={config.defaultColor} />,
+      }));
 
-  const loop = config.loop ? [...items, ...items] : items;
-  const duration = scrollDuration(config.speed, items.length);
+  const loop = config.loop ? [...safeItems, ...safeItems] : safeItems;
+  const duration = scrollDuration(config.speed, safeItems.length);
   const preset = heightPreset(config.height ?? 'standard');
   const reverse = (config.direction ?? 'left') === 'right';
 
   return (
     <div
-      className={`ticker ticker--${config.height ?? 'standard'}`}
+      className={[
+        'ticker',
+        `ticker--${config.height ?? 'standard'}`,
+        !config.enabled ? 'ticker--off' : '',
+        hidden ? 'ticker--hidden' : '',
+      ]
+        .filter(Boolean)
+        .join(' ')}
+      data-ticker-mounted="true"
       style={{
         background: config.background,
         color: config.defaultColor,
@@ -125,8 +156,15 @@ export function TickerTape({ config, listings, onDismiss, onOpenListing, preview
           ))}
         </div>
       </div>
-      {!preview && onDismiss && (
-        <button className="ticker__close" onClick={onDismiss} aria-label="Dismiss announcement">
+      {!preview && (
+        <button
+          className="ticker__close"
+          onClick={() => {
+            setHidden(true);
+            onDismiss?.();
+          }}
+          aria-label="Dismiss announcement"
+        >
           <IconClose size={14} />
         </button>
       )}

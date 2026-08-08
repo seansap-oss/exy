@@ -438,9 +438,29 @@ ul {
    ========================================================================== */
 .ticker {
   position: relative;
+  display: block;
+  width: 100%;
+  /* Explicit floor so the bar can never collapse to 0px. */
+  min-height: 40px;
   overflow: hidden;
   border-bottom: 1px solid var(--line);
-  z-index: 50;
+  /* Above the hero, below the sticky header (60) and modals. */
+  z-index: 40;
+  visibility: visible;
+}
+
+.ticker--compact {
+  min-height: 32px;
+}
+
+.ticker--large {
+  min-height: 48px;
+}
+
+/* Admin switched the bar off — collapse without unmounting. */
+.ticker--off,
+.ticker--hidden {
+  display: none;
 }
 
 .ticker__viewport {
