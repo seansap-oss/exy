@@ -22,7 +22,7 @@ import { SELLERS } from './data/sellers';
 import { LISTINGS } from './data/listings';
 import { PACKAGES, TIER_LIMITS, tierExpiry, type PaymentResult } from './lib/payments';
 import { compact, inr, maskPhone, timeAgo } from './lib/format';
-import { load, save, uid } from './lib/storage';
+import { load, loadMerged, save, uid } from './lib/storage';
 import { applyFilters, EMPTY_FILTERS } from './lib/search';
 import { DEFAULT_TICKER } from './lib/ticker';
 import { allLocalProfiles, persistProfile, profileToSeller, signOut as authSignOut } from './lib/auth';
@@ -106,7 +106,7 @@ export default function Prototype() {
   const [categories, setCategories] = useState<Category[]>(() => load<Category[]>('categories', CATEGORIES));
   const [sellers, setSellers] = useState<Seller[]>(() => load<Seller[]>('sellers', SELLERS));
   const [listings, setListings] = useState<Listing[]>(() => load<Listing[]>('listings', LISTINGS));
-  const [ticker, setTicker] = useState<TickerConfig>(() => load<TickerConfig>('ticker', DEFAULT_TICKER));
+  const [ticker, setTicker] = useState<TickerConfig>(() => loadMerged<TickerConfig>('ticker', DEFAULT_TICKER));
   const [threads, setThreads] = useState<Thread[]>(() => readThreads());
   const [messages, setMessages] = useState<Message[]>(() => readMessages());
   const [quotes, setQuotes] = useState<DealerQuote[]>(() => load<DealerQuote[]>('quotes', []));
@@ -146,6 +146,9 @@ export default function Prototype() {
 
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
+    // A dismissal is session-scoped to the current view; returning to the
+    // home feed always re-renders the global ticker.
+    if (route.name === 'home') setTickerDismissed(false);
   }, [route]);
 
   useEffect(() => {

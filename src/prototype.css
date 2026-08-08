@@ -446,7 +446,7 @@ ul {
 .ticker__viewport {
   display: flex;
   align-items: center;
-  height: 44px;
+  min-height: 28px;
   overflow: hidden;
   mask-image: linear-gradient(90deg, transparent 0, #000 44px, #000 calc(100% - 96px), transparent calc(100% - 56px));
 }
@@ -457,11 +457,12 @@ ul {
   gap: 42px;
   white-space: nowrap;
   padding-left: 100%;
-  animation: untick-scroll linear infinite;
+  animation: ticker-scroll linear infinite;
   will-change: transform;
 }
 
-@keyframes untick-scroll {
+/* Right-to-left marquee (default flow) */
+@keyframes ticker-scroll {
   from {
     transform: translate3d(0, 0, 0);
   }
@@ -470,8 +471,26 @@ ul {
   }
 }
 
-.ticker:hover .ticker__track {
-  animation-play-state: paused;
+/* Left-to-right marquee — starts off-screen left and flows right */
+.ticker__track--rtl {
+  padding-left: 0;
+  padding-right: 100%;
+  animation-name: ticker-scroll-rtl;
+}
+
+@keyframes ticker-scroll-rtl {
+  from {
+    transform: translate3d(-100%, 0, 0);
+  }
+  to {
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+/* Hover pauses in either direction and at any height */
+.ticker:hover .ticker__track,
+.ticker:focus-within .ticker__track {
+  animation-play-state: paused !important;
 }
 
 .ticker__item {
@@ -4415,4 +4434,131 @@ ul {
   padding: 14px 18px calc(14px + env(safe-area-inset-bottom, 0px));
   border-top: 1px solid var(--line);
   background: var(--surface-2);
+}
+
+/* Ticker height presets (Module: size adjuster) */
+.ticker--compact .ticker__item {
+  gap: 6px;
+}
+
+.ticker--compact .ticker__track {
+  gap: 32px;
+}
+
+.ticker--large .ticker__track {
+  gap: 54px;
+}
+
+.ticker--large .ticker__item {
+  gap: 11px;
+}
+
+/* Admin: swatch grid with labels */
+.bg-swatches {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
+  gap: 9px;
+}
+
+.bg-swatch {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 10px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--line-2);
+  background: var(--surface-2);
+  font-size: 12px;
+  font-weight: 650;
+  text-align: left;
+  transition: border-color 0.16s var(--ease), transform 0.16s var(--ease);
+}
+
+.bg-swatch:hover {
+  border-color: var(--accent);
+  transform: translateY(-2px);
+}
+
+.bg-swatch.is-on {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.bg-swatch i {
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  flex-shrink: 0;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+}
+
+/* Admin: segmented control */
+.segmented {
+  display: grid;
+  grid-auto-flow: column;
+  gap: 4px;
+  padding: 4px;
+  border-radius: var(--r-md);
+  background: var(--surface-3);
+  border: 1px solid var(--line);
+}
+
+.segmented button {
+  padding: 9px 10px;
+  border-radius: 9px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--ink-3);
+  transition: background 0.16s var(--ease), color 0.16s var(--ease);
+  text-align: center;
+}
+
+.segmented button:hover {
+  color: var(--ink);
+}
+
+.segmented button.is-on {
+  background: var(--surface);
+  color: var(--accent);
+  box-shadow: var(--shadow-sm);
+}
+
+.segmented button small {
+  display: block;
+  font-size: 10.5px;
+  font-weight: 600;
+  opacity: 0.7;
+  margin-top: 2px;
+}
+
+/* Admin: sticky save bar */
+.save-bar {
+  position: sticky;
+  bottom: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 18px;
+  padding: 13px 16px;
+  border-radius: var(--r-md);
+  background: color-mix(in srgb, var(--surface) 94%, transparent);
+  backdrop-filter: blur(14px);
+  border: 1px solid var(--line-2);
+  box-shadow: var(--shadow-md);
+}
+
+.save-bar__state {
+  font-size: 12.5px;
+  font-weight: 700;
+  flex: 1;
+}
+
+.save-bar__state.is-dirty {
+  color: var(--accent);
+}
+
+.save-bar__state.is-clean {
+  color: var(--ink-3);
 }

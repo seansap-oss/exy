@@ -18,6 +18,8 @@ import { uid } from '../lib/storage';
 import { isSupabaseLive } from '../lib/supabase';
 import {
   BG_PRESETS,
+  BG_SWATCHES,
+  HEIGHT_PRESETS,
   ICON_LIBRARY,
   newSegment,
   TEXT_COLORS,
@@ -196,8 +198,21 @@ function TickerManager({
   const [activeId, setActiveId] = useState<string>(config.segments[0]?.id ?? '');
   const [iconTarget, setIconTarget] = useState<'lead' | 'trail'>('lead');
 
+  const dirty = useMemo(() => JSON.stringify(draft) !== JSON.stringify(config), [draft, config]);
+
   const set = <K extends keyof TickerConfig>(key: K, value: TickerConfig[K]) =>
     setDraft((prev) => ({ ...prev, [key]: value }));
+
+  /**
+   * Visibility, playback and direction apply to the live bar immediately —
+   * these are the controls an operator expects to act instantly. Everything
+   * else stays in the draft until "Save Ticker Settings" is pressed.
+   */
+  const setLive = <K extends keyof TickerConfig>(key: K, value: TickerConfig[K]) => {
+    const next = { ...draft, [key]: value };
+    setDraft(next);
+    onChange(next);
+  };
 
   const active = draft.segments.find((segment) => segment.id === activeId) ?? draft.segments[0];
 
@@ -266,20 +281,20 @@ function TickerManager({
         <div className="pill-row" style={{ marginBottom: 16 }}>
           <button
             className={`btn ${draft.playing ? 'btn--soft' : 'btn--primary'} btn--sm`}
-            onClick={() => set('playing', !draft.playing)}
+            onClick={() => setLive('playing', !draft.playing)}
           >
             {draft.playing ? <IconPause size={16} /> : <IconPlayCircle size={16} />}
             {draft.playing ? 'Pause' : 'Start'}
           </button>
           <button
             className={`chip chip--sm${draft.loop ? ' is-on' : ''}`}
-            onClick={() => set('loop', !draft.loop)}
+            onClick={() => setLive('loop', !draft.loop)}
           >
             <IconLoop size={13} /> Loop {draft.loop ? 'on' : 'off'}
           </button>
           <button
             className={`chip chip--sm${draft.enabled ? ' is-on' : ''}`}
-            onClick={() => set('enabled', !draft.enabled)}
+            onClick={() => setLive('enabled', !draft.enabled)}
           >
             {draft.enabled ? 'Visible' : 'Hidden'}
           </button>
@@ -299,6 +314,107 @@ function TickerManager({
             onChange={(event) => set('speed', Number(event.target.value))}
           />
           <span className="field__hint">Hovering the live ticker always pauses it for readability.</span>
+        </div>
+
+        <div className="field" style={{ marginBottom: 0 }}>
+          <span className="field__label">Scroll direction</span>
+          <div className="segmented">
+            <button
+              className={draft.direction === 'left' ? 'is-on' : ''}
+              onClick={() => setLive('direction', 'left')}
+            >
+              ← Right to Left
+              <small>Default marquee</small>
+            </button>
+            <button
+              className={draft.direction === 'right' ? 'is-on' : ''}
+              onClick={() => setLive('direction', 'right')}
+            >
+              Left to Right →
+              <small>Reverse flow</small>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Size */}
+      <div className="panel">
+        <div className="panel__title">Ticker height &amp; size</div>
+        <div className="segmented">
+          {HEIGHT_PRESETS.map((preset) => (
+            <button
+              key={preset.id}
+              className={draft.height === preset.id ? 'is-on' : ''}
+              onClick={() => set('height', preset.id)}
+            >
+              {preset.label}
+              <small>{preset.blurb}</small>
+            </button>
+          ))}
+        </div>
+        <span className="field__hint" style={{ marginTop: 10, display: 'block' }}>
+          Adjusts vertical padding and font scale on both the preview and the live bar.
+        </span>
+      </div>
+
+      {/* Background colour */}
+      <div className="panel">
+        <div className="panel__title">Ticker background colour</div>
+        <div className="bg-swatches">
+          {BG_SWATCHES.map((swatch) => (
+            <button
+              key={swatch.value}
+              className={`bg-swatch${draft.background === swatch.value ? ' is-on' : ''}`}
+              onClick={() => set('background', swatch.value)}
+            >
+              <i style={{ background: swatch.value }} />
+              {swatch.label}
+            </button>
+          ))}
+        </div>
+
+        <div className="form-grid" style={{ marginTop: 14 }}>
+          <div className="field">
+            <label className="field__label" htmlFor="tk-hex">
+              Custom hex
+            </label>
+            <input
+              id="tk-hex"
+              className="input"
+              value={draft.background}
+              onChange={(event) => set('background', event.target.value)}
+              placeholder="#1C1917"
+              style={{ fontFamily: 'ui-monospace, monospace' }}
+            />
+          </div>
+          <div className="field">
+            <label className="field__label" htmlFor="tk-picker">
+              Colour picker
+            </label>
+            <input
+              id="tk-picker"
+              type="color"
+              className="input"
+              style={{ padding: 4, height: 46 }}
+              value={/^#[0-9a-f]{6}$/i.test(draft.background) ? draft.background : '#1C1917'}
+              onChange={(event) => set('background', event.target.value)}
+            />
+          </div>
+        </div>
+
+        <span className="field__label" style={{ display: 'block', marginBottom: 8 }}>
+          Gradient presets
+        </span>
+        <div className="swatches">
+          {BG_PRESETS.map((bg) => (
+            <button
+              key={bg}
+              className={`swatch${draft.background === bg ? ' is-on' : ''}`}
+              style={{ background: bg, width: 56 }}
+              onClick={() => set('background', bg)}
+              aria-label="Background preset"
+            />
+          ))}
         </div>
       </div>
 
@@ -549,20 +665,6 @@ function TickerManager({
           </div>
         </div>
 
-        <div className="field">
-          <span className="field__label">Background</span>
-          <div className="swatches">
-            {BG_PRESETS.map((bg) => (
-              <button
-                key={bg}
-                className={`swatch${draft.background === bg ? ' is-on' : ''}`}
-                style={{ background: bg, width: 56 }}
-                onClick={() => set('background', bg)}
-                aria-label="Background"
-              />
-            ))}
-          </div>
-        </div>
       </div>
 
       {/* Monetisation binding */}
@@ -593,18 +695,21 @@ function TickerManager({
         </div>
       </div>
 
-      <div className="toolbar">
+      <div className="save-bar">
+        <span className={`save-bar__state ${dirty ? 'is-dirty' : 'is-clean'}`}>
+          {dirty ? '● Unsaved changes' : '✓ All changes saved'}
+        </span>
+        <button className="btn btn--ghost btn--sm" onClick={() => setDraft(config)} disabled={!dirty}>
+          Discard
+        </button>
         <button
           className="btn btn--primary"
           onClick={() => {
             onChange(draft);
-            onToast('Ticker tape published', 'ok');
+            onToast('Ticker settings saved', 'ok');
           }}
         >
-          <IconCheck size={16} /> Publish ticker
-        </button>
-        <button className="btn btn--ghost" onClick={() => setDraft(config)}>
-          Discard changes
+          <IconCheck size={16} /> Save Ticker Settings
         </button>
       </div>
     </>

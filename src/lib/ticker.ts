@@ -1,4 +1,4 @@
-import type { TickerConfig, TickerFont, TickerSegment, Tier } from '../types';
+import type { TickerConfig, TickerFont, TickerHeight, TickerSegment, Tier } from '../types';
 import { uid } from './storage';
 
 export const TICKER_FONTS: Record<TickerFont, string> = {
@@ -37,6 +37,33 @@ export const BG_PRESETS = [
 
 export const TEXT_COLORS = ['#ffffff', '#14100a', '#fff7ed', '#ffe4c4', '#0c0b09', '#e8c26a', '#fde68a', '#bbf7d0'];
 
+/** Quick-pick background swatches for the admin colour picker. */
+export const BG_SWATCHES: Array<{ label: string; value: string }> = [
+  { label: 'Black', value: '#000000' },
+  { label: 'Dark Slate', value: '#18181B' },
+  { label: 'Gold Black', value: '#1C1917' },
+  { label: 'Royal Blue', value: '#1E3A8A' },
+  { label: 'Gold Accent', value: '#D97706' },
+  { label: 'Brand Orange', value: '#EA580C' },
+];
+
+/** Height presets — vertical padding and font scale. */
+export const HEIGHT_PRESETS: Array<{
+  id: TickerHeight;
+  label: string;
+  blurb: string;
+  padY: number;
+  fontScale: number;
+}> = [
+  { id: 'compact', label: 'Compact', blurb: 'Sleek thin bar', padY: 4, fontScale: 0.85 },
+  { id: 'standard', label: 'Standard', blurb: 'Default height', padY: 8, fontScale: 1 },
+  { id: 'large', label: 'Large', blurb: 'High visibility', padY: 12, fontScale: 1.15 },
+];
+
+export function heightPreset(height: TickerHeight) {
+  return HEIGHT_PRESETS.find((preset) => preset.id === height) ?? HEIGHT_PRESETS[1];
+}
+
 export function newSegment(partial: Partial<TickerSegment> = {}): TickerSegment {
   return {
     id: uid('seg'),
@@ -57,9 +84,11 @@ export const DEFAULT_TICKER: TickerConfig = {
   playing: true,
   loop: true,
   speed: 30,
+  direction: 'left',
+  height: 'standard',
   fontSize: 13,
   font: 'inter',
-  background: 'linear-gradient(90deg,#f2713a,#e0851b)',
+  background: '#1C1917',
   defaultColor: '#ffffff',
   showFeaturedListings: true,
   minTier: 'standard',

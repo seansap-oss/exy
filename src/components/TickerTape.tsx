@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import type { Listing, TickerConfig, TickerSegment } from '../types';
 import { inr } from '../lib/format';
-import { isTickerEligible, scrollDuration, TICKER_FONTS } from '../lib/ticker';
+import { heightPreset, isTickerEligible, scrollDuration, TICKER_FONTS } from '../lib/ticker';
 import { IconClose, IconFlame } from './Icons';
 
 /* -------------------------------------------------------------------------- */
@@ -84,20 +84,22 @@ export function TickerTape({ config, listings, onDismiss, onOpenListing, preview
 
   const loop = config.loop ? [...items, ...items] : items;
   const duration = scrollDuration(config.speed, items.length);
+  const preset = heightPreset(config.height ?? 'standard');
+  const reverse = (config.direction ?? 'left') === 'right';
 
   return (
     <div
-      className="ticker"
+      className={`ticker ticker--${config.height ?? 'standard'}`}
       style={{
         background: config.background,
         color: config.defaultColor,
-        fontSize: `${config.fontSize}px`,
+        fontSize: `${Math.round(config.fontSize * preset.fontScale)}px`,
         fontFamily: TICKER_FONTS[config.font],
       }}
     >
-      <div className="ticker__viewport">
+      <div className="ticker__viewport" style={{ paddingBlock: `${preset.padY}px` }}>
         <div
-          className="ticker__track"
+          className={`ticker__track${reverse ? ' ticker__track--rtl' : ''}`}
           style={{
             animationDuration: `${duration}s`,
             animationPlayState: config.playing ? 'running' : 'paused',

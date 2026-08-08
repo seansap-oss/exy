@@ -165,6 +165,12 @@ export interface Listing {
 /* ========================================================================== */
 export type TickerFont = 'inter' | 'mono' | 'serif' | 'condensed';
 
+/** Vertical padding + font scale of the bar. */
+export type TickerHeight = 'compact' | 'standard' | 'large';
+
+/** Marquee flow. `left` scrolls right-to-left (default marquee). */
+export type TickerDirection = 'left' | 'right';
+
 export interface TickerSegment {
   id: string;
   /** Icon/emoji rendered before the text */
@@ -182,11 +188,16 @@ export interface TickerSegment {
 }
 
 export interface TickerConfig {
+  /** Master visibility. Defaults to true so the bar renders on a fresh install. */
   enabled: boolean;
   playing: boolean;
   loop: boolean;
   /** 1–100; higher is faster */
   speed: number;
+  /** Marquee flow direction. */
+  direction: TickerDirection;
+  /** Bar height / padding preset. */
+  height: TickerHeight;
   fontSize: number;
   font: TickerFont;
   background: string;
