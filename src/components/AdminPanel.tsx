@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type {
   Category,
   DealerQuote,
@@ -200,14 +200,36 @@ function TickerManager({
 
   const dirty = useMemo(() => JSON.stringify(draft) !== JSON.stringify(config), [draft, config]);
 
+  // Keep the latest callback without retriggering the debounce effect.
+  const onChangeRef = useRef(onChange);
+  useEffect(() => {
+    onChangeRef.current = onChange;
+  }, [onChange]);
+
+  /**
+   * Auto-sync: every edit broadcasts to the live ticker after a short debounce
+   * so the main page updates without a refresh. The explicit Save button
+   * remains for committing immediately / confirming the write.
+   */
+  const syncTimer = useRef<number | null>(null);
+  const firstRun = useRef(true);
+
+  useEffect(() => {
+    if (firstRun.current) {
+      firstRun.current = false;
+      return;
+    }
+    if (syncTimer.current) window.clearTimeout(syncTimer.current);
+    syncTimer.current = window.setTimeout(() => onChangeRef.current(draft), 260);
+    return () => {
+      if (syncTimer.current) window.clearTimeout(syncTimer.current);
+    };
+  }, [draft]);
+
   const set = <K extends keyof TickerConfig>(key: K, value: TickerConfig[K]) =>
     setDraft((prev) => ({ ...prev, [key]: value }));
 
-  /**
-   * Visibility, playback and direction apply to the live bar immediately —
-   * these are the controls an operator expects to act instantly. Everything
-   * else stays in the draft until "Save Ticker Settings" is pressed.
-   */
+  /** Controls an operator expects to act with zero delay. */
   const setLive = <K extends keyof TickerConfig>(key: K, value: TickerConfig[K]) => {
     const next = { ...draft, [key]: value };
     setDraft(next);
@@ -697,7 +719,10 @@ function TickerManager({
 
       <div className="save-bar">
         <span className={`save-bar__state ${dirty ? 'is-dirty' : 'is-clean'}`}>
-          {dirty ? '● Unsaved changes' : '✓ All changes saved'}
+          {dirty ? '● Live-syncing to the main page…' : '✓ Saved & synced'}
+          <em style={{ display: 'block', fontStyle: 'normal', fontWeight: 500, fontSize: 11, opacity: 0.75 }}>
+            {isSupabaseLive ? 'Persisting to Supabase ticker_settings' : 'Persisting to this browser'}
+          </em>
         </span>
         <button className="btn btn--ghost btn--sm" onClick={() => setDraft(config)} disabled={!dirty}>
           Discard

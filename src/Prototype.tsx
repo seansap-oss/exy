@@ -22,9 +22,9 @@ import { SELLERS } from './data/sellers';
 import { LISTINGS } from './data/listings';
 import { PACKAGES, TIER_LIMITS, tierExpiry, type PaymentResult } from './lib/payments';
 import { compact, inr, maskPhone, timeAgo } from './lib/format';
-import { load, loadMerged, save, uid } from './lib/storage';
+import { load, save, uid } from './lib/storage';
 import { applyFilters, EMPTY_FILTERS } from './lib/search';
-import { DEFAULT_TICKER } from './lib/ticker';
+import { fetchTicker, persistTicker, readTickerLocal, subscribeTicker } from './lib/tickerStore';
 import { allLocalProfiles, persistProfile, profileToSeller, signOut as authSignOut } from './lib/auth';
 import { isUrgent, track, urgencyText, VIEW_DWELL_SECONDS } from './lib/analytics';
 import {
@@ -106,7 +106,7 @@ export default function Prototype() {
   const [categories, setCategories] = useState<Category[]>(() => load<Category[]>('categories', CATEGORIES));
   const [sellers, setSellers] = useState<Seller[]>(() => load<Seller[]>('sellers', SELLERS));
   const [listings, setListings] = useState<Listing[]>(() => load<Listing[]>('listings', LISTINGS));
-  const [ticker, setTicker] = useState<TickerConfig>(() => loadMerged<TickerConfig>('ticker', DEFAULT_TICKER));
+  const [ticker, setTicker] = useState<TickerConfig>(readTickerLocal);
   const [threads, setThreads] = useState<Thread[]>(() => readThreads());
   const [messages, setMessages] = useState<Message[]>(() => readMessages());
   const [quotes, setQuotes] = useState<DealerQuote[]>(() => load<DealerQuote[]>('quotes', []));
@@ -138,7 +138,6 @@ export default function Prototype() {
   useEffect(() => save('categories', categories), [categories]);
   useEffect(() => save('sellers', sellers), [sellers]);
   useEffect(() => save('listings', listings), [listings]);
-  useEffect(() => save('ticker', ticker), [ticker]);
   useEffect(() => save('quotes', quotes), [quotes]);
   useEffect(() => writeThreads(threads), [threads]);
   useEffect(() => writeMessages(messages), [messages]);
@@ -160,6 +159,29 @@ export default function Prototype() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
+  /**
+   * Ticker live sync — hydrate from Supabase on mount, then listen for admin
+   * edits (same tab), other tabs, and Realtime row changes so the live bar
+   * updates instantly without a refresh.
+   */
+  useEffect(() => {
+    let cancelled = false;
+    void fetchTicker().then((remote) => {
+      if (!cancelled && remote) setTicker(remote);
+    });
+    const unsubscribe = subscribeTicker((next) => setTicker(next));
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
+  }, []);
+
+  /** Single write path: local cache + broadcast + Supabase upsert. */
+  const updateTicker = useCallback((next: TickerConfig) => {
+    setTicker(next);
+    void persistTicker(next);
   }, []);
 
   /* Module 2.1 — a Reel shared into EXY opens the Express Post Drawer. */
@@ -647,7 +669,7 @@ export default function Prototype() {
           (isAdmin ? (
             <AdminPanel
               ticker={ticker}
-              onTicker={setTicker}
+              onTicker={updateTicker}
               categories={categories}
               onCategories={setCategories}
               sellers={sellers}
