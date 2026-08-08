@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">EXY</string>
+    <string name="title_activity_main">EXY</string>
+    <string name="package_name">com.exy.classifieds</string>
+    <string name="custom_url_scheme">com.exy.classifieds</string>
+</resources>
