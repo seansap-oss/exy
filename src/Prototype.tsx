@@ -115,7 +115,6 @@ export default function Prototype() {
   /* ------------------------------ ephemeral state ------------------------------ */
   const [route, setRoute] = useState<Route>({ name: 'home' });
   const [filters, setFilters] = useState<SearchFilters>(EMPTY_FILTERS);
-  const [tickerDismissed, setTickerDismissed] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [authOpen, setAuthOpen] = useState(false);
   const [authReason, setAuthReason] = useState<string>();
@@ -145,9 +144,6 @@ export default function Prototype() {
 
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
-    // A dismissal is session-scoped to the current view; returning to the
-    // home feed always re-renders the global ticker.
-    if (route.name === 'home') setTickerDismissed(false);
   }, [route]);
 
   useEffect(() => {
@@ -476,14 +472,11 @@ export default function Prototype() {
         }}
       />
 
-      {!tickerDismissed && (
-        <TickerTape
-          config={ticker}
-          listings={listings}
-          onDismiss={() => setTickerDismissed(true)}
-          onOpenListing={openListing}
-        />
-      )}
+      {/* Global Ticker Tape — mounted unconditionally between the header and
+          the main hero wrapper. Visibility is owned solely by the admin
+          `enabled` flag inside TickerTape; no storage/session state can gate
+          the mount itself. */}
+      <TickerTape config={ticker} listings={listings} onOpenListing={openListing} />
 
       <main className="main">
         {route.name === 'home' && (
