@@ -4,7 +4,7 @@ import { CATEGORIES, CATEGORY_MAP } from '../data/categories';
 import { parseVideoUrl, providerLabel } from '../lib/embeds';
 import { TIER_LIMITS } from '../lib/payments';
 import { uid } from '../lib/storage';
-import { MediaUploader } from './MediaUploader';
+import { UnifiedUploader } from './UnifiedUploader';
 import { HistorySuggest } from './HistorySuggest';
 import { readLastLocation, rememberText, requestCurrentLocation, writeLastLocation, clearLastLocation } from '../lib/sellerMemory';
 import { Modal, Switch } from './Ui';
@@ -111,7 +111,9 @@ export function SellFlow({ open, onClose, profile, activeAdCount, onPublish, onU
             ? video
             : undefined,
       media: hosted.length ? hosted : undefined,
-      photos: form.photos.slice(0, limits.photos),
+      photos: hosted.filter((m) => m.kind === 'image').length
+        ? hosted.filter((m) => m.kind === 'image').map((m) => `url(${m.src}) center/cover`)
+        : form.photos.slice(0, limits.photos),
       tier: profile.tier,
       featured: profile.tier === 'comprehensive' || profile.tier === 'dealer',
       condition: form.condition,
@@ -469,60 +471,62 @@ export function SellFlow({ open, onClose, profile, activeAdCount, onPublish, onU
 
           <div className="divider" />
 
+          {/* One compact control for photos and videos together. */}
           <div className="field">
             <span className="field__label">
-              <IconUpload size={13} /> Or upload your own video — hosted on EXY, compressed to 480p
+              <IconUpload size={13} /> Add photos or videos
             </span>
-            {limits.videos === 0 ? (
+            <UnifiedUploader
+              items={hosted}
+              onChange={setHosted}
+              maxPhotos={limits.photos}
+              maxVideos={limits.videos}
+              onError={(message) => onToast(message, 'err')}
+            />
+            {limits.videos === 0 && (
               <span className="field__hint">
-                Native video hosting starts on the Standard plan.{' '}
+                Photos only on the Free plan.{' '}
                 <button style={{ color: 'var(--accent)', fontWeight: 700 }} onClick={onUpgrade}>
                   Upgrade
-                </button>
+                </button>{' '}
+                to host video.
               </span>
-            ) : (
-              <MediaUploader
-                kind="video"
-                items={hosted}
-                onChange={setHosted}
-                max={limits.videos}
-                onError={(message) => onToast(message, 'err')}
-              />
             )}
           </div>
 
           <div className="divider" />
 
-          <div className="field">
-            <span className="field__label">
-              <IconUpload size={13} /> Photo gallery ({form.photos.length}/{limits.photos})
-            </span>
-            <span className="field__hint" style={{ marginBottom: 10 }}>
-              Pick a cover style for each photo slot. Uploads bind to your CDN bucket in production.
-            </span>
-            <div className="swatches">
-              {SWATCHES.map((swatch) => {
-                const on = form.photos.includes(swatch);
-                return (
-                  <button
-                    key={swatch}
-                    className={`swatch${on ? ' is-on' : ''}`}
-                    style={{ background: swatch }}
-                    aria-label="Photo slot"
-                    onClick={() => {
-                      if (on) {
-                        if (form.photos.length > 1) set('photos', form.photos.filter((p) => p !== swatch));
-                      } else if (form.photos.length < limits.photos) {
-                        set('photos', [...form.photos, swatch]);
-                      } else {
-                        setError(`Your plan allows ${limits.photos} photos. Upgrade for more.`);
-                      }
-                    }}
-                  />
-                );
-              })}
+          {/* Cover style is still available when no photo has been uploaded. */}
+          {!hosted.some((item) => item.kind === 'image') && (
+            <div className="field">
+              <span className="field__label">Cover style ({form.photos.length}/{limits.photos})</span>
+              <span className="field__hint" style={{ marginBottom: 10 }}>
+                Used as the card background when you haven't uploaded a photo.
+              </span>
+              <div className="swatches">
+                {SWATCHES.map((swatch) => {
+                  const on = form.photos.includes(swatch);
+                  return (
+                    <button
+                      key={swatch}
+                      className={`swatch${on ? ' is-on' : ''}`}
+                      style={{ background: swatch }}
+                      aria-label="Photo slot"
+                      onClick={() => {
+                        if (on) {
+                          if (form.photos.length > 1) set('photos', form.photos.filter((p) => p !== swatch));
+                        } else if (form.photos.length < limits.photos) {
+                          set('photos', [...form.photos, swatch]);
+                        } else {
+                          setError(`Your plan allows ${limits.photos} photos. Upgrade for more.`);
+                        }
+                      }}
+                    />
+                  );
+                })}
+              </div>
             </div>
-          </div>
+          )}
         </>
       )}
 

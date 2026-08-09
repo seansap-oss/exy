@@ -1,7 +1,9 @@
 import { useState } from 'react';
 import type { VideoEmbed as VideoEmbedType } from '../types';
 import { providerAllow, providerLabel } from '../lib/embeds';
-import { IconPlay, IconVideo } from './Icons';
+import { embedPlaysInline, fallbackGradient, originalUrl, thumbnailCandidates } from '../lib/thumbnails';
+import { MediaPreview } from './MediaPreview';
+import { IconLink, IconPlay, IconVideo } from './Icons';
 
 interface Props {
   video?: VideoEmbedType;
@@ -11,40 +13,75 @@ interface Props {
   title?: string;
 }
 
+/**
+ * Provider-aware media renderer.
+ *
+ * - YouTube / native  → plays inline in the card
+ * - Instagram / FB    → mounts the official embed and always offers
+ *                       "Open original" because those providers frequently
+ *                       refuse inline playback without a session
+ * - No/failed media   → branded EXY preview, never an empty box
+ */
 export function VideoEmbed({ video, fallback, orientation = 'vertical', autoStart = false, title }: Props) {
   const [playing, setPlaying] = useState(autoStart);
+  const gradient = fallback ?? fallbackGradient();
 
   if (!video) {
     return (
-      <div className="video">
-        <div className="video__empty" style={fallback ? { background: fallback } : undefined}>
-          <IconVideo size={26} />
-          <span>No social video attached to this listing yet.</span>
+      <div className={`video video--${orientation}`}>
+        <MediaPreview candidates={[]} fallback={gradient} alt={title ?? 'No media'} />
+        <div className="video__note">
+          <IconVideo size={13} /> No video attached to this listing yet.
         </div>
       </div>
     );
   }
 
-  const cls = `video video--${orientation === 'wide' || video.provider === 'youtube' ? (orientation === 'wide' ? 'wide' : 'vertical') : 'vertical'}`;
-  const posterStyle = video.poster
-    ? { backgroundImage: `url(${video.poster})` }
-    : fallback
-      ? { background: fallback }
-      : { background: '#101010' };
+  const candidates = thumbnailCandidates(video);
+  const original = originalUrl(video);
+  const inlineOk = embedPlaysInline(video.provider);
+  const cls = `video video--${orientation === 'wide' ? 'wide' : 'vertical'}`;
 
   return (
     <div className={cls}>
       {playing ? (
-        <iframe
-          src={video.provider === 'youtube' ? `${video.embedSrc}&autoplay=1` : video.embedSrc}
-          title={title ?? providerLabel(video.provider)}
-          allow={providerAllow(video.provider)}
-          allowFullScreen
-          loading="lazy"
-          referrerPolicy="strict-origin-when-cross-origin"
-        />
+        <>
+          {video.provider === 'native' ? (
+            <video
+              src={video.embedSrc}
+              poster={video.poster}
+              controls
+              autoPlay
+              playsInline
+              className="video__native"
+            />
+          ) : (
+            <iframe
+              src={video.provider === 'youtube' ? `${video.embedSrc}&autoplay=1` : video.embedSrc}
+              title={title ?? providerLabel(video.provider)}
+              allow={providerAllow(video.provider)}
+              allowFullScreen
+              loading="lazy"
+              referrerPolicy="strict-origin-when-cross-origin"
+            />
+          )}
+
+          {/* Embedded IG/FB often shows a login wall — always give an escape. */}
+          {!inlineOk && original && (
+            <a className="video__open" href={original} target="_blank" rel="noopener noreferrer">
+              <IconLink size={12} /> Open on {providerLabel(video.provider)}
+            </a>
+          )}
+        </>
       ) : (
-        <button className="video__poster" style={posterStyle} onClick={() => setPlaying(true)} aria-label="Play video">
+        <button className="video__poster" onClick={() => setPlaying(true)} aria-label="Play video">
+          <MediaPreview
+            candidates={candidates}
+            fallback={gradient}
+            provider={video.provider}
+            alt={title ?? providerLabel(video.provider)}
+            className="mp--fill"
+          />
           <span className="video__play">
             <IconPlay size={26} />
           </span>

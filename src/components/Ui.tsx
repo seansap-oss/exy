@@ -1,6 +1,8 @@
 import { useEffect, type ReactNode } from 'react';
 import type { Category, Listing, Seller } from '../types';
 import { compact, inr, timeAgo } from '../lib/format';
+import { fallbackGradient, listingCandidates } from '../lib/thumbnails';
+import { MediaPreview } from './MediaPreview';
 import { IconCheck, IconClose, IconEye, IconHeart, IconPin, IconShield, IconVideo } from './Icons';
 
 /* -------------------------------------------------------------------------- */
@@ -128,13 +130,12 @@ export function ListingCard({ listing, seller, saved, onOpen, onToggleSave }: Ca
         aria-label={listing.title}
         style={{ display: 'block', width: '100%', padding: 0 }}
       >
-        <span
+        <MediaPreview
+          candidates={listingCandidates(listing)}
+          fallback={fallbackGradient(listing)}
+          provider={listing.video?.provider}
+          alt={listing.title}
           className="card__media-fill"
-          style={
-            listing.video?.poster
-              ? { backgroundImage: `url(${listing.video.poster})`, backgroundSize: 'cover', backgroundPosition: 'center' }
-              : { background: listing.photos[0] }
-          }
         />
         <span className="card__badges">
           {listing.featured && <span className="badge badge--featured">Featured</span>}

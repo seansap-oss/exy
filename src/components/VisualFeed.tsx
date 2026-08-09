@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Listing, Seller } from '../types';
 import { providerAllow, providerLabel } from '../lib/embeds';
+import { fallbackGradient, listingCandidates } from '../lib/thumbnails';
+import { MediaPreview } from './MediaPreview';
 import { inr } from '../lib/format';
 import { isUrgent, urgencyText, VIEW_DWELL_SECONDS } from '../lib/analytics';
 import {
@@ -261,8 +263,6 @@ function FeedCard({
     else element.pause();
   }, [muted, isTop]);
 
-  const poster = nativeVideo?.poster ?? listing.video?.poster;
-
   return (
     <article className={`feed-card${isTop ? ' is-top' : ''}`}>
       <div className="feed-card__media">
@@ -289,17 +289,19 @@ function FeedCard({
         ) : (
           <button
             className="feed-card__poster"
-            style={
-              poster
-                ? { backgroundImage: `url(${poster})` }
-                : { background: listing.photos[0] ?? 'linear-gradient(135deg,#333,#111)' }
-            }
             onClick={() => {
               if (started) onExpand();
               else onStart();
             }}
             aria-label={started ? 'Open fullscreen player' : 'Play video'}
           >
+            <MediaPreview
+              candidates={listingCandidates(listing)}
+              fallback={fallbackGradient(listing)}
+              provider={listing.video?.provider}
+              alt={listing.title}
+              className="mp--fill"
+            />
             <span className="feed-card__play">
               <IconPlay size={28} />
             </span>

@@ -4970,3 +4970,281 @@ ul {
   flex-wrap: wrap;
   margin-top: 8px;
 }
+
+/* ==========================================================================
+   Provider-aware media preview - guarantees a visible, sized preview
+   ========================================================================== */
+.mp {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background-size: cover;
+  background-position: center;
+}
+
+.mp--fill {
+  position: absolute;
+  inset: 0;
+}
+
+.mp__img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* Branded EXY fallback tile - shown only when every candidate fails. */
+.mp__fallback {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  background:
+    radial-gradient(120% 100% at 50% 0%, rgba(255, 149, 0, 0.16), transparent 62%),
+    repeating-linear-gradient(135deg, rgba(255, 255, 255, 0.035) 0 12px, transparent 12px 24px);
+}
+
+.mp__mark {
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: 2.5px;
+  color: var(--accent);
+  opacity: 0.92;
+}
+
+.mp__provider {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.6);
+  padding: 3px 9px;
+  border-radius: var(--r-pill);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+}
+
+/* Native uploaded video inside the player frame */
+.video__native {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border: 0;
+  background: #000;
+}
+
+/* "Open original" escape hatch for providers that block inline playback */
+.video__open {
+  position: absolute;
+  right: 10px;
+  top: 10px;
+  z-index: 4;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 11px;
+  border-radius: var(--r-pill);
+  background: rgba(12, 11, 9, 0.82);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.video__open:hover {
+  border-color: var(--accent);
+  color: var(--accent-2);
+}
+
+.video__note {
+  position: absolute;
+  inset: auto 0 0 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 9px 12px;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.8), transparent);
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+/* ==========================================================================
+   Unified compact uploader (photos + videos in one control)
+   ========================================================================== */
+.uu__drop {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 12px 14px;
+  border-radius: var(--r-md);
+  border: 1.5px dashed var(--line-2);
+  background: var(--surface-2);
+  text-align: left;
+  transition: border-color 0.18s var(--ease), background 0.18s var(--ease);
+}
+
+.uu__drop:hover:not(:disabled),
+.uu__drop.is-over {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.uu__drop:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.uu__icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  background: var(--surface-3);
+  color: var(--accent);
+  flex-shrink: 0;
+}
+
+.uu__text b {
+  display: block;
+  font-size: 13.5px;
+  font-weight: 750;
+  margin-bottom: 2px;
+}
+
+.uu__text > span {
+  font-size: 11.5px;
+  color: var(--ink-3);
+}
+
+.uu__jobs {
+  display: grid;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.uu__job {
+  padding: 8px 11px;
+  border-radius: 10px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  font-size: 11.5px;
+}
+
+.uu__job.is-error {
+  border-color: var(--danger);
+  background: var(--danger-soft);
+}
+
+.uu__job-name {
+  display: block;
+  font-weight: 650;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.uu__job-stage {
+  display: block;
+  color: var(--ink-3);
+  margin: 3px 0 5px;
+}
+
+.uu__job-err {
+  display: block;
+  color: var(--danger);
+  font-weight: 650;
+  margin-top: 3px;
+}
+
+.uu__job-bar {
+  display: block;
+  height: 4px;
+  border-radius: 99px;
+  background: var(--surface-3);
+  overflow: hidden;
+}
+
+.uu__job-bar i {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+  transition: width 0.25s var(--ease);
+}
+
+.uu__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(76px, 1fr));
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.uu__tile {
+  position: relative;
+}
+
+.uu__thumb {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  border-radius: 10px;
+  background: var(--surface-3);
+  background-size: cover;
+  background-position: center;
+  color: var(--ink-3);
+  border: 1px solid var(--line);
+  overflow: hidden;
+}
+
+.uu__badge {
+  position: absolute;
+  left: 4px;
+  bottom: 4px;
+  font-style: normal;
+  font-size: 9px;
+  font-weight: 800;
+  padding: 2px 5px;
+  border-radius: 5px;
+  background: rgba(0, 0, 0, 0.66);
+  color: #fff;
+}
+
+.uu__meta {
+  display: block;
+  font-size: 9.5px;
+  color: var(--ink-3);
+  margin-top: 3px;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.uu__remove {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--danger);
+  color: #fff;
+  border: 2px solid var(--surface);
+}
