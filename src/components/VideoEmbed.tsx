@@ -1,7 +1,14 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { VideoEmbed as VideoEmbedType } from '../types';
-import { providerAllow, providerLabel } from '../lib/embeds';
-import { embedPlaysInline, fallbackGradient, originalUrl, thumbnailCandidates } from '../lib/thumbnails';
+import { providerLabel } from '../lib/embeds';
+import {
+  fetchOEmbed,
+  loadFacebookSDK,
+  loadInstagramEmbeds,
+  processEmbeds,
+  usesOEmbedProxy,
+} from '../lib/embedScripts';
+import { fallbackGradient, originalUrl } from '../lib/thumbnails';
 import { MediaPreview } from './MediaPreview';
 import { IconLink, IconPlay, IconVideo } from './Icons';
 
@@ -17,14 +24,48 @@ interface Props {
  * Provider-aware media renderer.
  *
  * - YouTube / native  → plays inline in the card
- * - Instagram / FB    → mounts the official embed and always offers
- *                       "Open original" because those providers frequently
- *                       refuse inline playback without a session
+ * - Instagram / FB    → fetches official embed HTML from the server-side
+ *                       proxy and mounts it here; the embed script is loaded
+ *                       and re-parsed after render so the blockquote becomes
+ *                       an interactive iframe. "Open on …" is always offered
+ *                       in case the provider blocks embedded playback.
  * - No/failed media   → branded EXY preview, never an empty box
  */
 export function VideoEmbed({ video, fallback, orientation = 'vertical', autoStart = false, title }: Props) {
   const [playing, setPlaying] = useState(autoStart);
   const gradient = fallback ?? fallbackGradient();
+
+  // Official embed HTML, fetched from the proxy for IG/FB only.
+  const useProxy = Boolean(video) && usesOEmbedProxy(video!.provider);
+  const [embedHtml, setEmbedHtml] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!video || !useProxy) {
+      setEmbedHtml(null);
+      return;
+    }
+    if (!video.url) return;
+    let active = true;
+    void fetchOEmbed(video.url).then((result) => {
+      if (active && result?.embedHtml) {
+        setEmbedHtml(result.embedHtml);
+      }
+    });
+    return () => {
+      active = false;
+    };
+  }, [video, useProxy]);
+
+  // Load the relevant embed script, then re-parse after the HTML commits.
+  useEffect(() => {
+    if (!embedHtml || !video) return;
+    const init = video.provider === 'facebook' ? loadFacebookSDK : loadInstagramEmbeds;
+    void init()
+      .then(() => processEmbeds())
+      .catch(() => {
+        /* fallback remains visible */
+      });
+  }, [embedHtml, video]);
 
   if (!video) {
     return (
@@ -37,9 +78,7 @@ export function VideoEmbed({ video, fallback, orientation = 'vertical', autoStar
     );
   }
 
-  const candidates = thumbnailCandidates(video);
   const original = originalUrl(video);
-  const inlineOk = embedPlaysInline(video.provider);
   const cls = `video video--${orientation === 'wide' ? 'wide' : 'vertical'}`;
 
   return (
@@ -47,19 +86,34 @@ export function VideoEmbed({ video, fallback, orientation = 'vertical', autoStar
       {playing ? (
         <>
           {video.provider === 'native' ? (
-            <video
-              src={video.embedSrc}
-              poster={video.poster}
-              controls
-              autoPlay
-              playsInline
-              className="video__native"
+            <video src={video.embedSrc} poster={video.poster} controls autoPlay playsInline className="video__native" />
+          ) : video.provider === 'youtube' ? (
+            <iframe
+              src={`${video.embedSrc}&autoplay=1`}
+              title={title ?? providerLabel(video.provider)}
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+              allowFullScreen
+              loading="lazy"
+              referrerPolicy="strict-origin-when-cross-origin"
+            />
+          ) : embedHtml ? (
+            <div
+              className="video__embed"
+              // Official IG/FB embed HTML (blockquote + script-driven iframe).
+              // eslint-disable-next-line react/no-danger
+              dangerouslySetInnerHTML={{ __html: embedHtml }}
+              ref={() => {
+                // Re-parse once React has committed the new DOM nodes.
+                void (video.provider === 'facebook' ? loadFacebookSDK : loadInstagramEmbeds)().then(() =>
+                  processEmbeds(),
+                );
+              }}
             />
           ) : (
             <iframe
-              src={video.provider === 'youtube' ? `${video.embedSrc}&autoplay=1` : video.embedSrc}
+              src={video.embedSrc}
               title={title ?? providerLabel(video.provider)}
-              allow={providerAllow(video.provider)}
+              allow=""
               allowFullScreen
               loading="lazy"
               referrerPolicy="strict-origin-when-cross-origin"
@@ -67,7 +121,7 @@ export function VideoEmbed({ video, fallback, orientation = 'vertical', autoStar
           )}
 
           {/* Embedded IG/FB often shows a login wall — always give an escape. */}
-          {!inlineOk && original && (
+          {(video.provider === 'instagram' || video.provider === 'facebook') && original && (
             <a className="video__open" href={original} target="_blank" rel="noopener noreferrer">
               <IconLink size={12} /> Open on {providerLabel(video.provider)}
             </a>
@@ -76,12 +130,12 @@ export function VideoEmbed({ video, fallback, orientation = 'vertical', autoStar
       ) : (
         <button className="video__poster" onClick={() => setPlaying(true)} aria-label="Play video">
           <MediaPreview
-            candidates={candidates}
+            candidates={[]}
             fallback={gradient}
             provider={video.provider}
-            oembedUrl={video.url ?? null}
             alt={title ?? providerLabel(video.provider)}
             className="mp--fill"
+            oembedUrl={video.url}
           />
           <span className="video__play">
             <IconPlay size={26} />

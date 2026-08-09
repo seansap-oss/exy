@@ -5248,3 +5248,28 @@ ul {
   color: #fff;
   border: 2px solid var(--surface);
 }
+
+/* Official embed mount point. The blockquote produced by the proxy is
+   transformed into an iframe by the provider's own script, so this simply
+   ensures the container has real dimensions even before the script fires. */
+.video__embed {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  min-height: 320px;
+  overflow: hidden;
+  background: #000;
+}
+
+.video__embed blockquote,
+.video__embed iframe {
+  width: 100% !important;
+  max-width: 100% !important;
+  margin: 0 !important;
+}
+
+@media (max-width: 760px) {
+  .video__embed {
+    min-height: 240px;
+  }
+}
