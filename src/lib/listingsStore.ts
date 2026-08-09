@@ -83,6 +83,12 @@ export async function fetchListings(): Promise<FetchResult> {
     const { data, error } = await supabase
       .from(TABLE)
       .select('*')
+      // Drafts (published=false) must never reach the public feed. RLS already
+      // hides them from anonymous visitors, but a signed-in seller or admin can
+      // legitimately SELECT their own drafts — so the feed filters explicitly
+      // to keep website and Android identical for every viewer.
+      .eq('published', true)
+      .eq('status', 'active')
       .order('created_at', { ascending: false })
       .limit(500);
     if (error) return { listings: null, error: error.message };

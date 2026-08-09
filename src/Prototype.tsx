@@ -109,7 +109,11 @@ export default function Prototype() {
   const [saved, setSaved] = useState<string[]>(() => load<string[]>('saved', []));
   const [categories, setCategories] = useState<Category[]>(() => load<Category[]>('categories', CATEGORIES));
   const [sellers, setSellers] = useState<Seller[]>(() => load<Seller[]>('sellers', SELLERS));
-  const [listings, setListings] = useState<Listing[]>(() => load<Listing[]>('listings', LISTINGS));
+  // Seed data is a first-paint placeholder only when Supabase is unavailable.
+  // Once configured, reloadListings() replaces this with authoritative rows.
+  const [listings, setListings] = useState<Listing[]>(() =>
+    load<Listing[]>('listings', isSupabaseLive ? [] : LISTINGS),
+  );
   const [ticker, setTicker] = useState<TickerConfig>(readTickerLocal);
   const [threads, setThreads] = useState<Thread[]>(() => readThreads());
   const [messages, setMessages] = useState<Message[]>(() => readMessages());
@@ -172,7 +176,13 @@ export default function Prototype() {
       console.warn('[EXY] feed load failed:', error);
       return;
     }
-    if (remote) setListings(remote);
+    // Supabase is the single source of truth. `remote` is null only when
+    // Supabase is unconfigured; an empty array is a legitimate empty feed and
+    // must replace stale localStorage rather than be ignored.
+    if (remote) {
+      setListings(remote);
+      save('listings', remote);
+    }
   }, []);
 
   useEffect(() => {
@@ -1167,7 +1177,23 @@ function HomeView({
           </section>
         )}
 
-        <section className="section">
+        {/* Honest empty state — no fake listings when the database has none. */}
+        {active.length === 0 && (
+          <section className="section">
+            <Empty
+              icon={<IconFilm size={28} />}
+              title="No listings published yet"
+              message="Published ads appear here the moment a seller or admin goes live."
+              action={
+                <button className="btn btn--primary" onClick={onSell}>
+                  <IconPlus size={16} /> Post the first listing
+                </button>
+              }
+            />
+          </section>
+        )}
+
+        <section className="section" style={active.length === 0 ? { display: 'none' } : undefined}>
           <div className="section__head">
             <div>
               <h2 className="section__title">Trending today</h2>
@@ -1188,7 +1214,7 @@ function HomeView({
           </div>
         </section>
 
-        <section className="section">
+        <section className="section" style={active.length === 0 ? { display: 'none' } : undefined}>
           <div className="section__head">
             <div>
               <h2 className="section__title">Fresh on EXY</h2>

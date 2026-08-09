@@ -16,6 +16,8 @@ import { parseVideoUrl, providerLabel } from '../lib/embeds';
 import { compact, inr, slugify } from '../lib/format';
 import { uid } from '../lib/storage';
 import { isSupabaseLive } from '../lib/supabase';
+import { saveListing, saveTicker, setListingPublished, validateForPublish, type PublishState } from '../lib/publish';
+import { removeListing } from '../lib/listingsStore';
 import {
   BG_PRESETS,
   BG_SWATCHES,
@@ -88,8 +90,8 @@ export function AdminPanel(props: Props) {
         <b>Super-Admin Portal</b>
         <span>
           {isSupabaseLive
-            ? 'Connected to Supabase — writes persist to the live database.'
-            : 'Demo mode — data persists to this browser. Add Supabase credentials for live sync.'}
+            ? 'Connected to production Supabase. Previews are local until you press Publish Live.'
+            : 'Supabase unavailable — nothing you save here will reach the live website or Android app.'}
         </span>
       </div>
 
@@ -201,6 +203,10 @@ function TickerManager({
   const dirty = useMemo(() => JSON.stringify(draft) !== JSON.stringify(config), [draft, config]);
 
   // Keep the latest callback without retriggering the debounce effect.
+  const [pubState, setPubState] = useState<PublishState>('idle');
+  const [pubError, setPubError] = useState('');
+  const busy = pubState === 'saving' || pubState === 'publishing';
+
   const onChangeRef = useRef(onChange);
   useEffect(() => {
     onChangeRef.current = onChange;
@@ -719,22 +725,61 @@ function TickerManager({
 
       <div className="save-bar">
         <span className={`save-bar__state ${dirty ? 'is-dirty' : 'is-clean'}`}>
-          {dirty ? '● Live-syncing to the main page…' : '✓ Saved & synced'}
+          {/* Truthful state: preview is never described as live. */}
+          {pubState === 'saving' && '⏳ Saving draft…'}
+          {pubState === 'publishing' && '⏳ Publishing live…'}
+          {pubState === 'saved' && '✓ Draft saved to Supabase (hidden from public)'}
+          {pubState === 'published' && '✓ Published live — all clients updated'}
+          {pubState === 'error' && `✗ ${pubError}`}
+          {pubState === 'idle' && (dirty ? '● Unsaved local preview' : '○ No unsaved changes')}
           <em style={{ display: 'block', fontStyle: 'normal', fontWeight: 500, fontSize: 11, opacity: 0.75 }}>
-            {isSupabaseLive ? 'Persisting to Supabase ticker_settings' : 'Persisting to this browser'}
+            {isSupabaseLive
+              ? 'Target: production Supabase · ticker_settings row 1'
+              : 'Supabase unavailable — nothing will reach the live site'}
           </em>
         </span>
         <button className="btn btn--ghost btn--sm" onClick={() => setDraft(config)} disabled={!dirty}>
           Discard
         </button>
         <button
-          className="btn btn--primary"
-          onClick={() => {
-            onChange(draft);
-            onToast('Ticker settings saved', 'ok');
+          className="btn btn--ghost btn--sm"
+          disabled={busy}
+          onClick={async () => {
+            setPubState('saving');
+            setPubError('');
+            const result = await saveTicker(draft, false);
+            if (result.ok) {
+              setPubState('saved');
+              onToast('Draft saved to Supabase (not public yet)', 'ok');
+            } else {
+              setPubState('error');
+              setPubError(result.error ?? 'Save failed');
+              onToast(`Save failed: ${result.error}`, 'err');
+            }
           }}
         >
-          <IconCheck size={16} /> Save Ticker Settings
+          Save Draft
+        </button>
+        <button
+          className="btn btn--primary"
+          disabled={busy}
+          onClick={async () => {
+            setPubState('publishing');
+            setPubError('');
+            const result = await saveTicker(draft, true);
+            if (result.ok) {
+              // Only mirror into app state once the database confirmed it.
+              onChange(draft);
+              setPubState('published');
+              onToast('Published live — website and Android will update', 'ok');
+            } else {
+              setPubState('error');
+              setPubError(result.error ?? 'Publish failed');
+              onToast(`Publish failed: ${result.error}`, 'err');
+            }
+          }}
+        >
+          <IconCheck size={16} /> Publish Live
         </button>
       </div>
     </>
@@ -787,7 +832,7 @@ function VisualSeeder({
   const set = <K extends keyof typeof form>(key: K, value: (typeof form)[K]) =>
     setForm((prev) => ({ ...prev, [key]: value }));
 
-  function seed() {
+  function seed(publishLive: boolean) {
     setError('');
     if (form.title.trim().length < 6) return setError('Enter a story / ad title.');
     if (!resolved) return setError('Provide at least one valid Instagram, YouTube or Facebook video URL.');
@@ -822,9 +867,22 @@ function VisualSeeder({
       status: 'active',
     };
 
-    onListings([listing, ...listings]);
-    onToast(`Seeded "${listing.title}" from ${providerLabel(resolved.provider)}`, 'ok');
-    setForm({ ...form, title: '', price: '', description: '', instagram: '', youtube: '', facebook: '', poster: '' });
+    // Write to production Supabase first; only mirror locally on confirmation.
+    void saveListing(listing, publishLive).then((result) => {
+      if (!result.ok) {
+        setError(`${publishLive ? 'Publish' : 'Draft save'} failed: ${result.error}`);
+        onToast(`${publishLive ? 'Publish' : 'Save'} failed: ${result.error}`, 'err');
+        return;
+      }
+      if (publishLive) onListings([listing, ...listings]);
+      onToast(
+        publishLive
+          ? `Published live (${result.operation}) — id ${result.id}`
+          : `Draft saved to Supabase — hidden from public feed`,
+        'ok',
+      );
+      setForm({ ...form, title: '', price: '', description: '', instagram: '', youtube: '', facebook: '', poster: '' });
+    });
   }
 
   function bulkSeed() {
@@ -1088,9 +1146,18 @@ function VisualSeeder({
 
         {error && <div className="field__error" style={{ marginTop: 12 }}>{error}</div>}
 
-        <button className="btn btn--primary" style={{ marginTop: 16 }} onClick={seed}>
-          <IconVideo size={16} /> Seed listing to database
-        </button>
+        <div className="pill-row" style={{ marginTop: 16 }}>
+          <button className="btn btn--ghost" onClick={() => seed(false)}>
+            Save Draft
+          </button>
+          <button className="btn btn--primary" onClick={() => seed(true)}>
+            <IconVideo size={16} /> Publish Live
+          </button>
+        </div>
+        <span className="field__hint" style={{ marginTop: 8, display: 'block' }}>
+          Draft writes to Supabase but stays hidden from the public feed. Publish Live makes it visible on the
+          website and Android app.
+        </span>
       </div>
 
       <div className="panel">
@@ -1194,13 +1261,25 @@ function NativeUploaderPanel({
       status: 'active',
     };
 
-    onListings([listing, ...listings]);
-    onToast(`Published "${listing.title}" with ${media.length} hosted file(s)`, 'ok');
-    setTitle('');
-    setPrice('');
-    setVideos([]);
-    setImages([]);
-    setAudio([]);
+    const check = validateForPublish(listing);
+    if (!check.valid) {
+      setError(check.errors.join(' '));
+      return;
+    }
+    void saveListing(listing, true).then((result) => {
+      if (!result.ok) {
+        setError(`Publish failed: ${result.error}`);
+        onToast(`Publish failed: ${result.error}`, 'err');
+        return;
+      }
+      onListings([listing, ...listings]);
+      onToast(`Published live (${result.operation}) with ${media.length} hosted file(s)`, 'ok');
+      setTitle('');
+      setPrice('');
+      setVideos([]);
+      setImages([]);
+      setAudio([]);
+    });
   }
 
   return (
@@ -2009,6 +2088,7 @@ function ListingRegistry({
               <th>Saves</th>
               <th>Leads</th>
               <th>Featured</th>
+              <th>Live</th>
               <th />
             </tr>
           </thead>
@@ -2046,11 +2126,31 @@ function ListingRegistry({
                   </button>
                 </td>
                 <td>
+                  {/* Publish / unpublish writes straight to Supabase. */}
+                  <button
+                    className={`chip chip--sm${listing.status === 'active' ? ' is-on' : ''}`}
+                    onClick={async () => {
+                      const goLive = listing.status !== 'active';
+                      const result = await setListingPublished(listing.id, goLive);
+                      if (!result.ok) return onToast(`Failed: ${result.error}`, 'err');
+                      onListings(
+                        listings.map((l) =>
+                          l.id === listing.id ? { ...l, status: goLive ? 'active' : 'paused' } : l,
+                        ),
+                      );
+                      onToast(goLive ? 'Published live' : 'Unpublished — hidden from public feed', 'ok');
+                    }}
+                  >
+                    {listing.status === 'active' ? 'Live' : 'Hidden'}
+                  </button>
+                </td>
+                <td>
                   <button
                     className="btn btn--danger btn--sm"
                     onClick={() => {
                       onListings(listings.filter((l) => l.id !== listing.id));
-                      onToast('Listing removed', 'info');
+                      removeListing(listing.id);
+                      onToast('Listing removed from Supabase', 'info');
                     }}
                   >
                     <IconTrash size={13} />
