@@ -6,20 +6,30 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
  * Fetches official Instagram / Facebook embed metadata server-side so the
  * browser and APK never see Meta credentials.
  *
- * Server-only environment variables:
+ * ACCESS MODEL (verified against Meta docs + live API, Graph v26.0):
+ *
+ * On 15 Jun 2026 Meta lifted the access-token requirement from all oEmbed
+ * endpoints, so App Review and Business Verification are NO LONGER required
+ * to embed public content. Tokenless calls are capped at 1,000 requests per
+ * endpoint per hour; an approved app token raises that to 5M/day.
+ *
+ * Optional server-only environment variables:
  *   META_APP_ID      - Meta app id
  *   META_APP_SECRET  - Meta app secret (NEVER sent to the client)
  *
- * The app token is derived as `{app-id}|{app-secret}` and used only in the
- * outbound request to graph.facebook.com. It is never echoed in a response.
+ * When present, `{app-id}|{app-secret}` is attached purely to obtain the
+ * higher rate limit. It is used only in the outbound request to
+ * graph.facebook.com and never echoed in a response.
  *
- * Requires the "oEmbed Read" feature on an App Review-approved Meta app.
- * Without credentials the endpoint degrades safely: it still validates and
- * normalises the URL and returns `available: false`, which the frontend
- * renders as the existing branded EXY fallback.
+ * IMPORTANT — no thumbnails: Meta removed `thumbnail_url`, `thumbnail_width`,
+ * `thumbnail_height`, `author_name` and `author_url` from Facebook post,
+ * Facebook video and Instagram post oEmbed responses on 3 Nov 2025, across
+ * all API versions. Responses now carry embed `html` only. The frontend
+ * therefore keeps its branded EXY fallback for the still image and uses this
+ * embed HTML / the original link for playback.
  */
 
-const GRAPH_VERSION = 'v21.0';
+const GRAPH_VERSION = 'v26.0';
 const FETCH_TIMEOUT_MS = 6000;
 const CACHE_TTL_MS = 6 * 60 * 60 * 1000; // 6h in-memory
 const CACHE_MAX_ENTRIES = 500;
@@ -199,17 +209,17 @@ function endpointFor(provider: Provider): string {
 
 async function fetchOEmbed(
   normalized: Normalized,
-  appToken: string,
+  appToken: string | null,
   originalUrl: string,
 ): Promise<OEmbedResponse> {
   const result = baseResponse(originalUrl, normalized);
 
   const params = new URLSearchParams({
     url: normalized.normalizedUrl,
-    access_token: appToken,
     maxwidth: '640',
-    fields: 'thumbnail_url,thumbnail_width,thumbnail_height,author_name,author_url,html',
   });
+  // Optional: only raises the rate limit. Tokenless works since 15 Jun 2026.
+  if (appToken) params.set('access_token', appToken);
   // Do not inject Meta's own script tag into our page.
   params.set('omitscript', 'true');
 
@@ -254,10 +264,15 @@ async function fetchOEmbed(
       embedHtml: html,
       authorName: typeof payload.author_name === 'string' ? payload.author_name : null,
       authorUrl: typeof payload.author_url === 'string' ? payload.author_url : null,
-      // Only a real thumbnail counts as available; boilerplate HTML does not.
-      available: Boolean(thumbnail),
-      status: thumbnail ? 'ok' : 'restricted',
-      message: thumbnail ? undefined : 'Provider returned no thumbnail for this media.',
+      // Meta dropped thumbnail_url on 3 Nov 2025, so embed HTML is the proof
+      // that the media exists and is publicly embeddable.
+      available: Boolean(html),
+      status: html ? 'ok' : 'restricted',
+      message: html
+        ? thumbnail
+          ? undefined
+          : 'Provider no longer returns thumbnails; embed HTML supplied.'
+        : 'Provider returned no embeddable media.',
     };
   } catch (error) {
     const aborted = error instanceof Error && error.name === 'AbortError';
@@ -312,17 +327,11 @@ export default async function handler(request: VercelRequest, response: VercelRe
     });
   }
 
+  // Credentials are OPTIONAL since 15 Jun 2026 - they only raise the rate
+  // limit from 1,000/hour to 5M/day. Absence must not block the request.
   const appId = process.env.META_APP_ID;
   const appSecret = process.env.META_APP_SECRET;
-
-  if (!appId || !appSecret) {
-    response.setHeader('Cache-Control', 'public, max-age=60');
-    return response.status(200).json({
-      ...baseResponse(raw, normalized),
-      status: 'not_configured',
-      message: 'Meta oEmbed credentials are not configured on the server.',
-    });
-  }
+  const appToken = appId && appSecret ? `${appId}|${appSecret}` : null;
 
   const cacheKey = `${normalized.provider}:${normalized.normalizedUrl}`;
   const cached = cacheGet(cacheKey);
@@ -332,7 +341,7 @@ export default async function handler(request: VercelRequest, response: VercelRe
     return response.status(200).json({ ...cached, cached: true });
   }
 
-  const result = await fetchOEmbed(normalized, `${appId}|${appSecret}`, raw);
+  const result = await fetchOEmbed(normalized, appToken, raw);
 
   // Cache only successes; failures may be transient.
   if (result.status === 'ok') {
