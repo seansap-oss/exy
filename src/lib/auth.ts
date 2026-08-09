@@ -156,12 +156,49 @@ export async function confirmEmail(email: string): Promise<AuthResult> {
   return { ok: true, profile, session: newSession(profile.id, profile.role) };
 }
 
+/**
+ * Signs in against the local driver only, bypassing Supabase.
+ * Used by the demo shortcuts when the Supabase profile layer is not migrated,
+ * so testers are never locked out by a missing table or unconfirmed email.
+ */
+export async function signInLocal(email: string, password: string): Promise<AuthResult> {
+  const cleanEmail = email.trim().toLowerCase();
+  const accounts = mockAccounts();
+  const account = accounts.find((item) => item.profile.email === cleanEmail);
+  if (!account) return { ok: false, error: 'No local account found.' };
+  if (account.password !== password) return { ok: false, error: 'Incorrect password.' };
+  return { ok: true, profile: account.profile, session: newSession(account.profile.id, account.profile.role) };
+}
+
+/** Creates + confirms a local account without touching Supabase. */
+export async function signUpLocal(input: SignUpInput): Promise<AuthResult> {
+  const accounts = mockAccounts();
+  if (accounts.some((item) => item.profile.email === input.email.trim().toLowerCase())) {
+    return signInLocal(input.email, input.password);
+  }
+  const profile = { ...blankProfile(input, accounts.length), emailVerified: true };
+  persistAccounts([...accounts, { profile, password: input.password }]);
+  return { ok: true, profile, session: newSession(profile.id, profile.role) };
+}
+
 export async function signIn(email: string, password: string): Promise<AuthResult> {
   const cleanEmail = email.trim().toLowerCase();
 
   if (isSupabaseLive && supabase) {
     const { data, error } = await supabase.auth.signInWithPassword({ email: cleanEmail, password });
-    if (error) return { ok: false, error: error.message };
+    if (error) {
+      // Supabase reports "Email not confirmed" when the account exists but the
+      // verification link was never clicked. Surface that distinctly so the UI
+      // can offer to resend it instead of showing a dead-end error.
+      if (/email not confirmed/i.test(error.message)) {
+        return {
+          ok: false,
+          error: 'This account exists but its email is not confirmed. Resend the link below, or confirm the user in Supabase.',
+          needsEmailVerification: true,
+        };
+      }
+      return { ok: false, error: error.message };
+    }
     if (!data.user.email_confirmed_at) return { ok: false, error: 'Please confirm your email before signing in.', needsEmailVerification: true };
 
     const { data: row } = await supabase.from(SUPABASE_TABLES.profiles).select('*').eq('id', data.user.id).single();
@@ -189,6 +226,33 @@ export async function signIn(email: string, password: string): Promise<AuthResul
 
 export async function signOut(): Promise<void> {
   if (isSupabaseLive && supabase) await supabase.auth.signOut();
+}
+
+/** Re-sends the Supabase confirmation email for an unconfirmed account. */
+export async function resendConfirmation(email: string): Promise<AuthResult> {
+  if (!isSupabaseLive || !supabase) return { ok: false, error: 'Supabase is not configured.' };
+  const { error } = await supabase.auth.resend({
+    type: 'signup',
+    email: email.trim().toLowerCase(),
+    options: { emailRedirectTo: `${window.location.origin}/?verified=1` },
+  });
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
+}
+
+/**
+ * True when the Supabase profile layer is unreachable — either credentials are
+ * absent or the `profiles` table has not been migrated yet. In that state the
+ * app runs on the local driver, so the demo shortcuts must stay available.
+ */
+export async function profilesTableReady(): Promise<boolean> {
+  if (!isSupabaseLive || !supabase) return false;
+  try {
+    const { error } = await supabase.from(SUPABASE_TABLES.profiles).select('id').limit(1);
+    return !error;
+  } catch {
+    return false;
+  }
 }
 
 export function persistProfile(profile: Profile): void {

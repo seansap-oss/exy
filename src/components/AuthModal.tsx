@@ -1,6 +1,15 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { Profile, Session } from '../types';
-import { confirmEmail, signIn, signUp, USERNAME_RE } from '../lib/auth';
+import {
+  confirmEmail,
+  profilesTableReady,
+  resendConfirmation,
+  signIn,
+  signInLocal,
+  signUp,
+  signUpLocal,
+  USERNAME_RE,
+} from '../lib/auth';
 import { isSupabaseLive } from '../lib/supabase';
 import { Modal } from './Ui';
 import { IconCheck, IconLock, IconShield, IconUser } from './Icons';
@@ -21,6 +30,15 @@ export function AuthModal({ open, onClose, onAuth, onPendingProfile, reason }: P
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [pendingEmail, setPendingEmail] = useState('');
+  // Demo shortcuts must remain available until the Supabase profile layer is
+  // actually migrated - credentials alone are not enough.
+  const [backendReady, setBackendReady] = useState<boolean | null>(null);
+  const [notice, setNotice] = useState('');
+
+  useEffect(() => {
+    if (!open) return;
+    void profilesTableReady().then(setBackendReady);
+  }, [open]);
 
   const set = <K extends keyof typeof form>(key: K, value: string) =>
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -70,16 +88,15 @@ export function AuthModal({ open, onClose, onAuth, onPendingProfile, reason }: P
     const email = kind === 'admin' ? 'admin@exy.in' : 'buyer@exy.in';
     const password = 'exydemo123';
 
-    let result = await signIn(email, password);
+    // Local driver only - never blocked by a missing table or unconfirmed email.
+    let result = await signInLocal(email, password);
     if (!result.ok) {
-      await signUp({
+      result = await signUpLocal({
         fullName: kind === 'admin' ? 'EXY Admin' : 'Demo Buyer',
         username: kind === 'admin' ? 'exyadmin' : 'demobuyer',
         email,
         password,
       });
-      await confirmEmail(email);
-      result = await signIn(email, password);
     }
 
     setBusy(false);
@@ -120,9 +137,33 @@ export function AuthModal({ open, onClose, onAuth, onPendingProfile, reason }: P
 
         {error && <div className="field__error" style={{ marginBottom: 12 }}>{error}</div>}
 
+        {notice && (
+          <div className="field__hint" style={{ marginBottom: 12, color: 'var(--success)', fontWeight: 650 }}>
+            {notice}
+          </div>
+        )}
+
         {!isSupabaseLive && (
           <button className="btn btn--primary btn--block btn--lg" onClick={activate} disabled={busy}>
             {busy ? <span className="spinner" /> : <IconCheck size={16} />} Simulate email confirmation
+          </button>
+        )}
+
+        {isSupabaseLive && (
+          <button
+            className="btn btn--primary btn--block btn--lg"
+            disabled={busy || !pendingEmail}
+            onClick={async () => {
+              setBusy(true);
+              setError('');
+              setNotice('');
+              const result = await resendConfirmation(pendingEmail);
+              setBusy(false);
+              if (result.ok) setNotice(`Confirmation link re-sent to ${pendingEmail}.`);
+              else setError(result.error ?? 'Could not resend the confirmation email.');
+            }}
+          >
+            {busy ? <span className="spinner" /> : <IconCheck size={16} />} Resend confirmation email
           </button>
         )}
 
@@ -280,7 +321,7 @@ export function AuthModal({ open, onClose, onAuth, onPendingProfile, reason }: P
         </button>
       </div>
 
-      {!isSupabaseLive && (
+      {backendReady === false && (
         <div className="auth-demo">
           <b>Demo shortcuts</b>
           <span>No email needed — these create and activate an account instantly.</span>
