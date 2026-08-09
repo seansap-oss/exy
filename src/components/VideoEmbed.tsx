@@ -79,6 +79,7 @@ export function VideoEmbed({ video, fallback, orientation = 'vertical', autoStar
             candidates={candidates}
             fallback={gradient}
             provider={video.provider}
+            oembedUrl={video.url ?? null}
             alt={title ?? providerLabel(video.provider)}
             className="mp--fill"
           />

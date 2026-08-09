@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { VideoProvider } from '../types';
 import { PROVIDER_LABEL } from '../lib/thumbnails';
+import { fetchOEmbed, peekCached, usesOEmbedProxy } from '../lib/oembed';
 import { IconFilm, IconImage, IconMusic, IconVideo } from './Icons';
 
 interface Props {
@@ -13,6 +14,14 @@ interface Props {
   className?: string;
   /** Renders the branded EXY badge on the fallback tile. */
   branded?: boolean;
+  /**
+   * Original Instagram/Facebook post URL. When supplied, the server-side
+   * oEmbed proxy is asked for an official thumbnail and the result is
+   * appended to the candidate list. Purely additive — if the proxy has no
+   * credentials or the media is unavailable, the existing branded fallback
+   * still renders.
+   */
+  oembedUrl?: string | null;
 }
 
 /**
@@ -22,10 +31,17 @@ interface Props {
  * observable via onError — the previous implementation used background-image,
  * which fails silently and leaves an empty box.
  */
-export function MediaPreview({ candidates, fallback, provider, alt, className, branded = true }: Props) {
+export function MediaPreview({ candidates, fallback, provider, alt, className, branded = true, oembedUrl }: Props) {
   const [index, setIndex] = useState(0);
   const [failed, setFailed] = useState(false);
   const signature = candidates.join('|');
+
+  // Official thumbnail resolved by the server-side proxy, appended last so
+  // existing direct candidates keep priority and behaviour is unchanged.
+  const shouldProxy = Boolean(oembedUrl) && Boolean(provider) && usesOEmbedProxy(provider!);
+  const [proxied, setProxied] = useState<string | null>(() =>
+    shouldProxy ? (peekCached(oembedUrl!)?.thumbnailUrl ?? null) : null,
+  );
 
   // Reset when the candidate set changes (e.g. card recycled in a list).
   useEffect(() => {
@@ -33,7 +49,27 @@ export function MediaPreview({ candidates, fallback, provider, alt, className, b
     setFailed(false);
   }, [signature]);
 
-  const src = !failed && index < candidates.length ? candidates[index] : null;
+  useEffect(() => {
+    if (!shouldProxy || !oembedUrl) return;
+    const cached = peekCached(oembedUrl);
+    if (cached !== undefined) {
+      setProxied(cached?.thumbnailUrl ?? null);
+      return;
+    }
+    let active = true;
+    void fetchOEmbed(oembedUrl).then((result) => {
+      if (active && result?.thumbnailUrl) {
+        setProxied(result.thumbnailUrl);
+        setFailed(false);
+      }
+    });
+    return () => {
+      active = false;
+    };
+  }, [shouldProxy, oembedUrl]);
+
+  const chain = proxied ? [...candidates, proxied] : candidates;
+  const src = !failed && index < chain.length ? chain[index] : null;
 
   return (
     <span className={`mp${className ? ` ${className}` : ''}`} style={{ background: fallback }}>
@@ -46,7 +82,7 @@ export function MediaPreview({ candidates, fallback, provider, alt, className, b
           decoding="async"
           referrerPolicy="no-referrer"
           onError={() => {
-            if (index + 1 < candidates.length) setIndex(index + 1);
+            if (index + 1 < chain.length) setIndex(index + 1);
             else setFailed(true);
           }}
         />

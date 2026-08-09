@@ -134,6 +134,7 @@ export function ListingCard({ listing, seller, saved, onOpen, onToggleSave }: Ca
           candidates={listingCandidates(listing)}
           fallback={fallbackGradient(listing)}
           provider={listing.video?.provider}
+          oembedUrl={listing.video?.url ?? null}
           alt={listing.title}
           className="card__media-fill"
         />

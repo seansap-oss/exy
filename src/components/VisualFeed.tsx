@@ -299,6 +299,7 @@ function FeedCard({
               candidates={listingCandidates(listing)}
               fallback={fallbackGradient(listing)}
               provider={listing.video?.provider}
+              oembedUrl={listing.video?.url ?? null}
               alt={listing.title}
               className="mp--fill"
             />
