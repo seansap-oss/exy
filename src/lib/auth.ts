@@ -35,7 +35,21 @@ export function validateSignUp(input: SignUpInput, takenUsernames: string[]): st
 /* -------------------------------------------------------------------------- */
 interface MockAccount {
   profile: Profile;
-  password: string;
+  /** SHA-256 hex digest — plaintext passwords are never persisted. */
+  passwordHash: string;
+}
+
+/**
+ * Hashes a demo password before it touches localStorage. This driver is only
+ * used when Supabase is unreachable, but a plaintext credential must never be
+ * written to disk even in that mode.
+ */
+async function hashPassword(password: string): Promise<string> {
+  const data = new TextEncoder().encode(`exy.v2:${password}`);
+  const digest = await crypto.subtle.digest('SHA-256', data);
+  return Array.from(new Uint8Array(digest))
+    .map((byte) => byte.toString(16).padStart(2, '0'))
+    .join('');
 }
 
 function mockAccounts(): MockAccount[] {
@@ -139,7 +153,7 @@ export async function signUp(input: SignUpInput): Promise<AuthResult> {
 
   // Local driver — simulate the Supabase email-verification handshake.
   const profile = blankProfile(input, accounts.length);
-  persistAccounts([...accounts, { profile, password: input.password }]);
+  persistAccounts([...accounts, { profile, passwordHash: await hashPassword(input.password) }]);
   return { ok: true, profile, needsEmailVerification: true };
 }
 
@@ -166,7 +180,7 @@ export async function signInLocal(email: string, password: string): Promise<Auth
   const accounts = mockAccounts();
   const account = accounts.find((item) => item.profile.email === cleanEmail);
   if (!account) return { ok: false, error: 'No local account found.' };
-  if (account.password !== password) return { ok: false, error: 'Incorrect password.' };
+  if (account.passwordHash !== (await hashPassword(password))) return { ok: false, error: 'Incorrect password.' };
   return { ok: true, profile: account.profile, session: newSession(account.profile.id, account.profile.role) };
 }
 
@@ -177,7 +191,7 @@ export async function signUpLocal(input: SignUpInput): Promise<AuthResult> {
     return signInLocal(input.email, input.password);
   }
   const profile = { ...blankProfile(input, accounts.length), emailVerified: true };
-  persistAccounts([...accounts, { profile, password: input.password }]);
+  persistAccounts([...accounts, { profile, passwordHash: await hashPassword(input.password) }]);
   return { ok: true, profile, session: newSession(profile.id, profile.role) };
 }
 
@@ -217,7 +231,7 @@ export async function signIn(email: string, password: string): Promise<AuthResul
   const accounts = mockAccounts();
   const account = accounts.find((item) => item.profile.email === cleanEmail);
   if (!account) return { ok: false, error: 'No account found with that email.' };
-  if (account.password !== password) return { ok: false, error: 'Incorrect password.' };
+  if (account.passwordHash !== (await hashPassword(password))) return { ok: false, error: 'Incorrect password.' };
   if (!account.profile.emailVerified)
     return { ok: false, error: 'Confirm your email address to activate the account.', needsEmailVerification: true, profile: account.profile };
 
