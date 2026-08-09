@@ -27,11 +27,13 @@ export function youtubeCandidates(id: string): string[] {
  * any API key or token. Private/deleted posts simply fail the image load and
  * we drop through to the branded fallback.
  */
-export function instagramCandidates(shortcode: string): string[] {
-  return [
-    `https://www.instagram.com/p/${shortcode}/media/?size=l`,
-    `https://www.instagram.com/p/${shortcode}/media/?size=m`,
-  ];
+export function instagramCandidates(_shortcode: string): string[] {
+  // The legacy /p/{code}/media/ redirect is retired — it now returns 404 and
+  // is blocked by ORB in Chromium, producing failed requests and console
+  // noise for zero benefit. Meta also removed `thumbnail_url` from the oEmbed
+  // response on 3 Nov 2025, so no still image is obtainable. Instagram cards
+  // therefore use the branded EXY fallback and the official embed on play.
+  return [];
 }
 
 /**
