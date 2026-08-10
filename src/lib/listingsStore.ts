@@ -113,6 +113,63 @@ export function providerColumns(listing: Listing) {
   };
 }
 
+
+/**
+ * Canonical identity for a listing, used to collapse duplicates.
+ * Priority: database UUID > provider media key > normalized video URL.
+ */
+export function listingKey(listing: Listing): string {
+  /*
+   * Media identity is checked FIRST. Two rows can carry different UUIDs yet
+   * describe the same shared post — that is exactly the duplicate case seen
+   * in production (4 pairs with identical timestamps). Keying on the UUID
+   * first would treat those as distinct and never collapse them.
+   */
+  if (listing.video?.provider && listing.video.externalId) {
+    return `media:${listing.video.provider}:${listing.video.externalId}`;
+  }
+  if (listing.video?.url) return `url:${normalizeMediaUrl(listing.video.url)}`;
+  // No media to compare — fall back to the row identity so distinct listings
+  // are never merged.
+  if (isUuid(listing.id)) return `id:${listing.id}`;
+  return `local:${listing.id}`;
+}
+
+/** Strips tracking params and trailing slashes so the same post matches. */
+export function normalizeMediaUrl(url: string): string {
+  try {
+    const parsed = new URL(url);
+    parsed.search = '';
+    parsed.hash = '';
+    return `${parsed.host.replace(/^www\./, '')}${parsed.pathname.replace(/\/+$/, '')}`.toLowerCase();
+  } catch {
+    return url.trim().toLowerCase();
+  }
+}
+
+/**
+ * Collapses duplicates by canonical identity, keeping the row that carries a
+ * real database UUID. Two genuinely different listings are never merged
+ * because their UUIDs differ and their media keys differ.
+ */
+export function dedupeListings(listings: Listing[]): Listing[] {
+  const seen = new Map<string, Listing>();
+  for (const listing of listings) {
+    const key = listingKey(listing);
+    const existing = seen.get(key);
+    if (!existing) {
+      seen.set(key, listing);
+      continue;
+    }
+    // Prefer the persisted row; otherwise keep the newer one.
+    const preferIncoming =
+      (isUuid(listing.id) && !isUuid(existing.id)) ||
+      (isUuid(listing.id) === isUuid(existing.id) &&
+        +new Date(listing.createdAt) > +new Date(existing.createdAt));
+    if (preferIncoming) seen.set(key, listing);
+  }
+  return Array.from(seen.values());
+}
 export interface FetchResult {
   listings: Listing[] | null;
   error: string | null;
@@ -134,7 +191,7 @@ export async function fetchListings(): Promise<FetchResult> {
       .order('created_at', { ascending: false })
       .limit(500);
     if (error) return { listings: null, error: error.message };
-    return { listings: (data ?? []).map(rowToListing), error: null };
+    return { listings: dedupeListings((data ?? []).map(rowToListing)), error: null };
   } catch (error) {
     return { listings: null, error: error instanceof Error ? error.message : 'network error' };
   }

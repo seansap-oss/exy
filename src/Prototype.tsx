@@ -41,7 +41,14 @@ import {
 } from './lib/messaging';
 import { isSupabaseLive } from './lib/supabase';
 import { useAndroidBack } from './hooks/useAndroidBack';
-import { fetchListings, patchListing, publishListing, removeListing, subscribeListings } from './lib/listingsStore';
+import {
+  dedupeListings,
+  fetchListings,
+  patchListing,
+  publishListing,
+  removeListing,
+  subscribeListings,
+} from './lib/listingsStore';
 import { syncHistoryFromRemote } from './lib/sellerMemory';
 import { TickerTape } from './components/TickerTape';
 import { SearchModal } from './components/SearchModal';
@@ -513,7 +520,7 @@ export default function Prototype() {
   const onPublish = useCallback(
     (listing: Listing) => {
       // Optimistic insert so the UI stays responsive.
-      setListings((prev) => [listing, ...prev]);
+      setListings((prev) => dedupeListings([listing, ...prev]));
       go({ name: 'profile', tab: 'ads' });
 
       void publishListing(listing).then(({ ok, id, error }) => {

@@ -148,7 +148,11 @@ export async function saveListing(listing: Listing, publishLive: boolean): Promi
 
     if (existingId) {
       let { data, error } = await supabase.from('listings').update(row).eq('id', existingId).select('id').single();
-      if (error && /column .* does not exist|PGRST204/i.test(error.message)) {
+      // Same guard as the insert path - PGRST204 must not trigger a retry.
+      if (
+        error != null &&
+        (/column .* does not exist/i.test(error.message) || error.code === '42703' || error.code === 'PGRST205')
+      ) {
         ({ data, error } = await supabase.from('listings').update(base).eq('id', existingId).select('id').single());
       }
       if (error) {
@@ -160,8 +164,19 @@ export async function saveListing(listing: Listing, publishLive: boolean): Promi
     // `id` is absent from `row`, so PostgreSQL generates the UUID.
     let { data, error } = await supabase.from('listings').insert(row).select('id').single();
 
-    // Migration 004 not applied yet -> retry without the provider columns.
-    if (error && /column .* does not exist|PGRST204/i.test(error.message)) {
+    /*
+     * Retry ONLY when a column genuinely does not exist.
+     *
+     * The previous condition also matched PGRST204, which Supabase returns
+     * when `.single()` gets no row back — even though the INSERT succeeded.
+     * That made every publish insert a second row (verified: 4 duplicate
+     * pairs with identical 0ms timestamps). PGRST204 is now excluded.
+     */
+    const missingColumn =
+      error != null &&
+      (/column .* does not exist/i.test(error.message) || error.code === '42703' || error.code === 'PGRST205');
+
+    if (missingColumn) {
       ({ data, error } = await supabase.from('listings').insert(base).select('id').single());
     }
     if (error) {

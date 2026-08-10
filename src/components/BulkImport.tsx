@@ -5,7 +5,7 @@ import { saveListing, validateForPublish } from '../lib/publish';
 import { uid } from '../lib/storage';
 import { IconCheck, IconChevron, IconClose, IconPlus, IconTrash } from './Icons';
 import { TaxonomyPicker, type TaxonomySelection } from './TaxonomyPicker';
-import { TAXONOMY } from '../data/taxonomy';
+import { TAXONOMY, subcategoriesOf, typesOf } from '../data/taxonomy';
 
 const MAX_ROWS = 20;
 const ROW_BATCH = 10;
@@ -99,6 +99,8 @@ export function BulkImport({ sellers, listings, onListings, onToast }: Props) {
     if (!video) return { listing: null, error: 'Unrecognised URL — use a public Instagram, YouTube or Facebook link.' };
     if (row.title.trim().length < 6) return { listing: null, error: 'Title must be at least 6 characters.' };
     if (!row.categoryId) return { listing: null, error: 'Category is required.' };
+    if (subcategoriesOf(row.categoryId).length && !row.subCategoryId)
+      return { listing: null, error: 'Subcategory required.' };
     if (!row.city.trim()) return { listing: null, error: 'City is required.' };
 
     const seller = sellers.find((item) => item.id === defaultSeller);
@@ -111,6 +113,8 @@ export function BulkImport({ sellers, listings, onListings, onToast }: Props) {
       negotiable: true,
       categoryId: row.categoryId,
       subCategoryId: row.subCategoryId,
+      typeId: row.typeId || undefined,
+      attributes: Object.keys(row.attributes).length ? row.attributes : undefined,
       tags: [],
       features: [],
       location: row.city.trim(),
@@ -258,6 +262,8 @@ export function BulkImport({ sellers, listings, onListings, onToast }: Props) {
               <th style={{ minWidth: 210 }}>Video URL</th>
               <th style={{ minWidth: 160 }}>Title</th>
               <th style={{ minWidth: 130 }}>Category</th>
+              <th style={{ minWidth: 130 }}>Subcategory</th>
+              <th style={{ minWidth: 120 }}>Type</th>
               <th style={{ width: 90 }}>Price</th>
               <th style={{ width: 120 }}>City</th>
               <th style={{ minWidth: 150 }}>Description</th>
@@ -298,13 +304,48 @@ export function BulkImport({ sellers, listings, onListings, onToast }: Props) {
                     <select
                       className="select bulk-input"
                       value={row.categoryId}
-                      onChange={(event) => patch(row.key, { categoryId: event.target.value })}
+                      // Changing the parent clears children so no orphan id is saved.
+                      onChange={(event) =>
+                        patch(row.key, { categoryId: event.target.value, subCategoryId: '', typeId: '' })
+                      }
                       disabled={row.busy || Boolean(row.publishedId)}
                     >
                       <option value="">Select…</option>
                       {TAXONOMY.map((category) => (
                         <option key={category.id} value={category.id}>
                           {category.name}
+                        </option>
+                      ))}
+                    </select>
+                  </td>
+                  <td>
+                    <select
+                      className="select bulk-input"
+                      value={row.subCategoryId}
+                      onChange={(event) => patch(row.key, { subCategoryId: event.target.value, typeId: '' })}
+                      disabled={row.busy || Boolean(row.publishedId) || !row.categoryId}
+                    >
+                      <option value="">{row.categoryId ? 'Select…' : 'Pick category first'}</option>
+                      {subcategoriesOf(row.categoryId).map((sub) => (
+                        <option key={sub.id} value={sub.id}>
+                          {sub.name}
+                        </option>
+                      ))}
+                    </select>
+                  </td>
+                  <td>
+                    <select
+                      className="select bulk-input"
+                      value={row.typeId}
+                      onChange={(event) => patch(row.key, { typeId: event.target.value })}
+                      disabled={row.busy || Boolean(row.publishedId) || !row.subCategoryId}
+                    >
+                      <option value="">
+                        {typesOf(row.categoryId, row.subCategoryId).length ? 'Select…' : '—'}
+                      </option>
+                      {typesOf(row.categoryId, row.subCategoryId).map((type) => (
+                        <option key={type.id} value={type.id}>
+                          {type.name}
                         </option>
                       ))}
                     </select>
@@ -373,7 +414,7 @@ export function BulkImport({ sellers, listings, onListings, onToast }: Props) {
                 </tr>
                 {row.open && (
                   <tr className="bulk-details">
-                    <td colSpan={9}>
+                    <td colSpan={11}>
                       <div className="bulk-details__body">
                         <TaxonomyPicker
                           value={{
