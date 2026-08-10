@@ -1,6 +1,6 @@
 import type { Listing, TickerConfig } from '../types';
 import { supabase, isSupabaseLive } from './supabase';
-import { listingToRow } from './listingsStore';
+import { isUuid, listingToRow, providerColumns } from './listingsStore';
 import { configToRow } from './tickerStore';
 
 /**
@@ -70,9 +70,36 @@ export function validateForPublish(listing: Listing): ListingValidation {
 
 /** True when the row already exists, so we UPDATE instead of INSERT. */
 async function rowExists(id: string): Promise<boolean> {
-  if (!isSupabaseLive || !supabase) return false;
+  if (!isSupabaseLive || !supabase || !isUuid(id)) return false;
   const { data } = await supabase.from('listings').select('id').eq('id', id).maybeSingle();
   return Boolean(data);
+}
+
+/**
+ * seller_id must be the authenticated user's UUID — never a client-side id and
+ * never a value the caller can choose. Returns null when signed out.
+ */
+async function authenticatedSellerId(): Promise<string | null> {
+  if (!isSupabaseLive || !supabase) return null;
+  const { data } = await supabase.auth.getUser();
+  return data.user?.id ?? null;
+}
+
+/**
+ * Finds an existing row for the same shared media so a retry updates instead
+ * of creating a duplicate.
+ */
+async function findByProviderMedia(sellerId: string, listing: Listing): Promise<string | null> {
+  if (!isSupabaseLive || !supabase || !listing.video?.externalId) return null;
+  const { data, error } = await supabase
+    .from('listings')
+    .select('id')
+    .eq('seller_id', sellerId)
+    .eq('provider', listing.video.provider)
+    .eq('provider_media_id', listing.video.externalId)
+    .maybeSingle();
+  if (error) return null; // migration 004 pending
+  return data?.id ?? null;
 }
 
 /**
@@ -90,31 +117,53 @@ export async function saveListing(listing: Listing, publishLive: boolean): Promi
     }
   }
 
-  const row = {
+  // Ownership always comes from the session, never from the client payload.
+  const sellerId = await authenticatedSellerId();
+  if (!sellerId) {
+    return {
+      ok: false,
+      id: null,
+      operation: 'none',
+      error: 'You must be signed in to publish. Sign in and try again.',
+      reason: 'permission_denied',
+    };
+  }
+
+  const base = {
     ...listingToRow(listing),
+    seller_id: sellerId,
     published: publishLive,
     status: publishLive ? 'active' : listing.status,
     updated_at: new Date().toISOString(),
   };
+  // Migration 004 columns; dropped automatically if the migration is pending.
+  const row = { ...base, ...providerColumns(listing) };
 
   try {
-    const exists = await rowExists(listing.id);
+    // Update when we already hold a real UUID, or when the same shared media
+    // was published before — so a retry never duplicates.
+    const existingId = (await rowExists(listing.id))
+      ? listing.id
+      : await findByProviderMedia(sellerId, listing);
 
-    if (exists) {
-      // Never re-insert an existing record; preserve id/seller/media ordering.
-      const { data, error } = await supabase
-        .from('listings')
-        .update(row)
-        .eq('id', listing.id)
-        .select('id')
-        .single();
+    if (existingId) {
+      let { data, error } = await supabase.from('listings').update(row).eq('id', existingId).select('id').single();
+      if (error && /column .* does not exist|PGRST204/i.test(error.message)) {
+        ({ data, error } = await supabase.from('listings').update(base).eq('id', existingId).select('id').single());
+      }
       if (error) {
         return { ok: false, id: null, operation: 'update', error: error.message, reason: classify(error.message) };
       }
-      return { ok: true, id: data?.id ?? listing.id, operation: 'update', error: null };
+      return { ok: true, id: data?.id ?? existingId, operation: 'update', error: null };
     }
 
-    const { data, error } = await supabase.from('listings').insert(row).select('id').single();
+    // `id` is absent from `row`, so PostgreSQL generates the UUID.
+    let { data, error } = await supabase.from('listings').insert(row).select('id').single();
+
+    // Migration 004 not applied yet -> retry without the provider columns.
+    if (error && /column .* does not exist|PGRST204/i.test(error.message)) {
+      ({ data, error } = await supabase.from('listings').insert(base).select('id').single());
+    }
     if (error) {
       return { ok: false, id: null, operation: 'insert', error: error.message, reason: classify(error.message) };
     }

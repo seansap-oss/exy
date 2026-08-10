@@ -5303,3 +5303,37 @@ ul {
   color: var(--accent);
   border-color: var(--accent);
 }
+
+/* Bulk import table - desktop-first, reuses existing table styling */
+.bulk-table td {
+  padding: 6px 8px;
+  vertical-align: top;
+}
+
+.bulk-input {
+  height: 34px;
+  font-size: 12.5px;
+  padding: 0 9px;
+}
+
+select.bulk-input {
+  padding-right: 26px;
+  background-position: calc(100% - 14px) 15px, calc(100% - 9px) 15px;
+}
+
+.bulk-detect {
+  display: block;
+  margin-top: 3px;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--accent);
+  text-transform: capitalize;
+}
+
+.bulk-row--error td {
+  background: var(--danger-soft);
+}
+
+.bulk-row--ok td {
+  background: var(--success-soft);
+}

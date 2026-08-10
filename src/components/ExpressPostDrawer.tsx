@@ -3,6 +3,7 @@ import type { Listing, Profile } from '../types';
 import { keepSharedUrl, recoverSharedUrl, releaseSharedUrl, type SharePayload } from '../lib/shareTarget';
 import { readLastLocation, rememberText, writeLastLocation } from '../lib/sellerMemory';
 import { HistorySuggest } from './HistorySuggest';
+import { saveListing } from '../lib/publish';
 import { CATEGORIES } from '../data/categories';
 import { parseVideoUrl, providerLabel } from '../lib/embeds';
 import { TIER_LIMITS } from '../lib/payments';
@@ -18,7 +19,7 @@ interface Props {
 }
 
 /**
- * Module 2.1 — Express Post Drawer.
+ * Module 2.1 â€” Express Post Drawer.
  * Opens when a Reel/Short is shared into EXY from Instagram, Facebook or
  * YouTube. Video link, thumbnail and description arrive pre-filled; the user
  * only picks a category, types a price and hits Quick Publish.
@@ -32,13 +33,14 @@ export function ExpressPostDrawer({ payload, profile, onClose, onPublish, onNeed
   const [url, setUrl] = useState('');
   const [city, setCity] = useState('');
   const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
 
   /**
-   * Feature 1 — seed the form exactly once per shared payload.
+   * Feature 1 â€” seed the form exactly once per shared payload.
    *
    * Previously this effect keyed on the `payload` object identity, so any
    * parent re-render produced a new object, re-ran the effect and wiped
-   * whatever the user had typed — including the URL. It now keys on a stable
+   * whatever the user had typed â€” including the URL. It now keys on a stable
    * content signature and never overwrites a field with an empty value, so a
    * failed thumbnail/caption extraction leaves the URL intact.
    */
@@ -113,14 +115,22 @@ export function ExpressPostDrawer({ payload, profile, onClose, onPublish, onNeed
       status: 'active',
     };
 
-    // Feature 2 + 3 — remember what the seller actually used.
-    writeLastLocation(listing.city, '', profile.id);
-    rememberText('location', listing.city, profile.id);
-    if (listing.description) rememberText('description', listing.description, profile.id);
-
-    releaseSharedUrl();
-    onPublish(listing);
-    onClose();
+    // Write to Supabase FIRST. The drawer stays open and keeps every field on
+    // failure so the user can correct and retry without re-entering anything.
+    setBusy(true);
+    void saveListing(listing, true).then((result) => {
+      setBusy(false);
+      if (!result.ok) {
+        setError(`Publish failed: ${result.error}`);
+        return;
+      }
+      writeLastLocation(listing.city, '', profile.id);
+      rememberText('location', listing.city, profile.id);
+      if (listing.description) rememberText('description', listing.description, profile.id);
+      releaseSharedUrl();
+      onPublish({ ...listing, id: result.id ?? listing.id });
+      onClose();
+    });
   }
 
   return (
@@ -136,7 +146,7 @@ export function ExpressPostDrawer({ payload, profile, onClose, onPublish, onNeed
           <div style={{ flex: 1 }}>
             <b>Express post</b>
             <span>
-              {video ? `${providerLabel(video.provider)} detected — publish in seconds` : 'Shared link received'}
+              {video ? `${providerLabel(video.provider)} detected â€” publish in seconds` : 'Shared link received'}
             </span>
           </div>
           <button className="icon-btn" onClick={onClose} aria-label="Close">
@@ -158,8 +168,8 @@ export function ExpressPostDrawer({ payload, profile, onClose, onPublish, onNeed
             </div>
             <div className="xpd__link">
               <b>Video link</b>
-              <input value={url} onChange={(event) => setUrl(event.target.value)} placeholder="https://…" />
-              <span>{video ? `✓ ${providerLabel(video.provider)} · ${video.externalId}` : 'Not recognised yet'}</span>
+              <input value={url} onChange={(event) => setUrl(event.target.value)} placeholder="https://â€¦" />
+              <span>{video ? `âœ“ ${providerLabel(video.provider)} Â· ${video.externalId}` : 'Not recognised yet'}</span>
             </div>
           </div>
 
@@ -180,7 +190,7 @@ export function ExpressPostDrawer({ payload, profile, onClose, onPublish, onNeed
           <div className="form-grid">
             <div className="field">
               <label className="field__label" htmlFor="xp-price">
-                Price (₹)
+                Price (â‚¹)
               </label>
               <input
                 id="xp-price"
@@ -250,7 +260,7 @@ export function ExpressPostDrawer({ payload, profile, onClose, onPublish, onNeed
 
           <div className="field">
             <label className="field__label" htmlFor="xp-desc">
-              Description <span style={{ color: 'var(--ink-3)', fontWeight: 500 }}>— auto-filled from caption</span>
+              Description <span style={{ color: 'var(--ink-3)', fontWeight: 500 }}>â€” auto-filled from caption</span>
             </label>
             <textarea
               id="xp-desc"
@@ -275,8 +285,8 @@ export function ExpressPostDrawer({ payload, profile, onClose, onPublish, onNeed
           <button className="btn btn--ghost" onClick={onClose}>
             Cancel
           </button>
-          <button className="btn btn--primary" style={{ flex: 1 }} onClick={publish}>
-            <IconCheck size={16} /> Quick Publish
+          <button className="btn btn--primary" style={{ flex: 1 }} onClick={publish} disabled={busy}>
+            <IconCheck size={16} /> {busy ? 'Publishing' : 'Quick Publish'}
           </button>
         </footer>
       </div>

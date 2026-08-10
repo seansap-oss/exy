@@ -29,6 +29,7 @@ import {
 } from '../lib/ticker';
 import { TickerTape, TickerStack } from './TickerTape';
 import { MediaUploader } from './MediaUploader';
+import { BulkImport } from './BulkImport';
 import { Switch } from './Ui';
 import {
   IconBadge,
@@ -51,7 +52,7 @@ import {
   IconWallet,
 } from './Icons';
 
-type AdminTab = 'ticker' | 'linker' | 'uploader' | 'sellers' | 'cloner' | 'dealers' | 'listings' | 'metrics';
+type AdminTab = 'ticker' | 'linker' | 'bulk' | 'uploader' | 'sellers' | 'cloner' | 'dealers' | 'listings' | 'metrics';
 
 interface Props {
   ticker: TickerConfig;
@@ -76,6 +77,7 @@ export function AdminPanel(props: Props) {
   const nav: Array<{ id: AdminTab; label: string; icon: React.ReactNode }> = [
     { id: 'ticker', label: 'Ticker Tape', icon: <IconMegaphone size={17} /> },
     { id: 'linker', label: 'Visual Seeder', icon: <IconVideo size={17} /> },
+    { id: 'bulk', label: 'Bulk URL Import', icon: <IconList size={17} /> },
     { id: 'uploader', label: 'Native Uploader', icon: <IconUpload size={17} /> },
     { id: 'sellers', label: 'Seller Profiling', icon: <IconUsers size={17} /> },
     { id: 'cloner', label: 'Category Cloner', icon: <IconLayers size={17} /> },
@@ -120,6 +122,15 @@ export function AdminPanel(props: Props) {
           )}
           {tab === 'linker' && (
             <VisualSeeder
+              categories={props.categories}
+              sellers={props.sellers}
+              listings={props.listings}
+              onListings={props.onListings}
+              onToast={props.onToast}
+            />
+          )}
+          {tab === 'bulk' && (
+            <BulkImport
               categories={props.categories}
               sellers={props.sellers}
               listings={props.listings}

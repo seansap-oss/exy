@@ -20,7 +20,17 @@ export function rowToListing(row: any): Listing {
     region: row.region === 'global' ? 'global' : 'india',
     city: row.city ?? '',
     sellerId: row.seller_id ?? '',
-    video: row.video ?? undefined,
+    // Prefer the dedicated text columns; fall back to legacy jsonb.
+    video: row.video ??
+      (row.video_url
+        ? {
+            provider: row.provider ?? 'none',
+            url: row.video_url,
+            externalId: row.provider_media_id ?? '',
+            embedSrc: row.video_url,
+            poster: row.thumbnail_url ?? undefined,
+          }
+        : undefined),
     media: row.media?.length ? row.media : undefined,
     photos: row.photos?.length ? row.photos : ['linear-gradient(135deg,#FFB300,#FF9500)'],
     tier: row.tier ?? 'free',
@@ -37,9 +47,22 @@ export function rowToListing(row: any): Listing {
   };
 }
 
+/** True for a real PostgreSQL UUID, false for client ids like `lst_abc123`. */
+export function isUuid(value: string | null | undefined): boolean {
+  return typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
+}
+
+/**
+ * Maps a Listing to a `listings` row.
+ *
+ * `id` is deliberately omitted — client ids look like `lst_msmi4xnlmphphhw`
+ * and are not UUIDs, so passing one produced:
+ *   invalid input syntax for type uuid: "lst_msmi4xnlmphphhw"
+ * PostgreSQL generates the UUID on insert; updates target the row by its real
+ * UUID in the .eq() clause instead. Provider references live in text columns.
+ */
 export function listingToRow(listing: Listing) {
   return {
-    id: listing.id,
     title: listing.title,
     description: listing.description,
     price: listing.price,
@@ -68,6 +91,21 @@ export function listingToRow(listing: Listing) {
     status: listing.status,
     published: true,
     created_at: listing.createdAt,
+  };
+}
+
+/**
+ * Provider reference columns added by migration 004. Kept separate so the
+ * insert can retry without them if the migration has not been applied yet —
+ * the shortcode must never fall back into a UUID column.
+ */
+export function providerColumns(listing: Listing) {
+  return {
+    provider: listing.video?.provider ?? null,
+    provider_media_id: listing.video?.externalId ?? null,
+    video_url: listing.video?.url ?? null,
+    thumbnail_url: listing.video?.poster ?? null,
+    client_ref: listing.id,
   };
 }
 
