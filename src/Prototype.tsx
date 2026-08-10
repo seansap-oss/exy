@@ -620,6 +620,7 @@ export default function Prototype() {
               onQualifiedView={qualifiedView}
               onImpression={(id) => recordEvent(id, 'impression')}
               onExpand={setFullscreen}
+              onDeadMedia={(message) => toast(message, 'err')}
             />
           </div>
         )}

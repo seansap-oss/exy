@@ -5348,3 +5348,39 @@ select.bulk-input {
   border-left: 3px solid var(--accent);
   padding-left: 14px;
 }
+
+/* No-media state - replaces a decorative play button */
+.feed-card__nomedia {
+  position: relative;
+  z-index: 2;
+  padding: 8px 16px;
+  border-radius: var(--r-pill);
+  background: rgba(12, 11, 9, 0.72);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+/* Open-original action inside the immersive player */
+.fs-player__open {
+  position: absolute;
+  left: 14px;
+  top: 14px;
+  z-index: 5;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 15px;
+  border-radius: var(--r-pill);
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  color: var(--accent-ink);
+  font-size: 12px;
+  font-weight: 800;
+  box-shadow: 0 6px 20px rgba(255, 149, 0, 0.35);
+}
+
+.fs-player__open:hover {
+  transform: scale(1.03);
+}

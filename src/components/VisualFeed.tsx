@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Listing, Seller } from '../types';
 import { providerAllow, providerLabel } from '../lib/embeds';
 import { fallbackGradient, listingCandidates } from '../lib/thumbnails';
+import { openOriginal, providerActionLabel, resolvePlayback } from '../lib/playback';
+import { VideoEmbed } from './VideoEmbed';
 import { MediaPreview } from './MediaPreview';
 import { inr } from '../lib/format';
 import { isUrgent, urgencyText, VIEW_DWELL_SECONDS } from '../lib/analytics';
@@ -29,6 +31,8 @@ interface Props {
   /** fires once a card has been dwelled on for >10s */
   onQualifiedView: (id: string, dwellSec: number) => void;
   onImpression: (id: string) => void;
+  /** Surfaces a readable error when media cannot be opened. */
+  onDeadMedia?: (message: string) => void;
   /** Opens the Module 4 Embedded Live-Classifieds Overlay. */
   onExpand: (listing: Listing) => void;
 }
@@ -50,6 +54,7 @@ export function VisualFeed({
   onQualifiedView,
   onImpression,
   onExpand,
+  onDeadMedia,
 }: Props) {
   const deck = listings.filter((listing) => listing.status === 'active');
   const initial = Math.max(0, startId ? deck.findIndex((listing) => listing.id === startId) : 0);
@@ -179,6 +184,7 @@ export function VisualFeed({
                 onToggleSave={() => onToggleSave(listing.id)}
                 onDetails={() => onOpenListing(listing.id)}
                 onContact={() => onContact(listing.id)}
+                onDeadMedia={onDeadMedia}
               />
             </div>
           ))}
@@ -237,6 +243,7 @@ function FeedCard({
   onToggleSave,
   onDetails,
   onContact,
+  onDeadMedia,
 }: {
   listing: Listing;
   seller?: Seller;
@@ -250,9 +257,11 @@ function FeedCard({
   onToggleSave: () => void;
   onDetails: () => void;
   onContact: () => void;
+  onDeadMedia?: (message: string) => void;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const nativeVideo = listing.media?.find((item) => item.kind === 'video');
+  const playback = resolvePlayback(listing);
   const isTop = active;
 
   useEffect(() => {
@@ -277,11 +286,11 @@ function FeedCard({
             autoPlay={isTop}
             className="feed-card__video"
           />
-        ) : started && listing.video ? (
+        ) : started && playback.kind === 'inline' && playback.src ? (
           <iframe
-            src={`${listing.video.embedSrc}${listing.video.provider === 'youtube' ? `&autoplay=1&mute=${muted ? 1 : 0}` : ''}`}
+            src={`${playback.src}&autoplay=1&mute=${muted ? 1 : 0}`}
             title={listing.title}
-            allow={providerAllow(listing.video.provider)}
+            allow={providerAllow(listing.video?.provider ?? 'youtube')}
             allowFullScreen
             loading="lazy"
             className="feed-card__frame"
@@ -289,11 +298,31 @@ function FeedCard({
         ) : (
           <button
             className="feed-card__poster"
-            onClick={() => {
-              if (started) onExpand();
-              else onStart();
+            onClick={(event) => {
+              // Stop the tap bubbling into card navigation.
+              event.stopPropagation();
+              if (!playback.playable) return;
+
+              // YouTube / native → play inline, then expand on a second tap.
+              if (playback.kind === 'inline') {
+                if (started) onExpand();
+                else onStart();
+                return;
+              }
+              // Instagram / Facebook → immersive player mounts the official
+              // embed and always offers the original link.
+              if (playback.kind === 'embed') {
+                onExpand();
+                return;
+              }
+              // No embeddable form → hand off to the provider.
+              if (!openOriginal(playback.original)) {
+                onDeadMedia?.('Could not open the original link.');
+              }
             }}
-            aria-label={started ? 'Open fullscreen player' : 'Play video'}
+            aria-label={playback.playable ? playback.label : 'Media unavailable'}
+            // A non-playable card must not look interactive.
+            style={playback.playable ? undefined : { cursor: 'default' }}
           >
             <MediaPreview
               candidates={listingCandidates(listing)}
@@ -303,9 +332,13 @@ function FeedCard({
               alt={listing.title}
               className="mp--fill"
             />
-            <span className="feed-card__play">
-              <IconPlay size={28} />
-            </span>
+            {playback.playable ? (
+              <span className="feed-card__play">
+                <IconPlay size={28} />
+              </span>
+            ) : (
+              <span className="feed-card__nomedia">Media unavailable</span>
+            )}
           </button>
         )}
 
@@ -371,6 +404,7 @@ function FeedCard({
 export function FullscreenPlayer({ listing, onClose }: { listing: Listing; onClose: () => void }) {
   const [muted, setMuted] = useState(false);
   const nativeVideo = listing.media?.find((item) => item.kind === 'video');
+  const playback = resolvePlayback(listing);
 
   useEffect(() => {
     const prev = document.body.style.overflow;
@@ -386,15 +420,28 @@ export function FullscreenPlayer({ listing, onClose }: { listing: Listing; onClo
       <div className="fs-player__frame">
         {nativeVideo ? (
           <video src={nativeVideo.src} poster={nativeVideo.poster} muted={muted} autoPlay loop playsInline controls />
-        ) : listing.video ? (
+        ) : playback.kind === 'inline' && playback.src ? (
           <iframe
-            src={`${listing.video.embedSrc}${listing.video.provider === 'youtube' ? `&autoplay=1&mute=${muted ? 1 : 0}` : ''}`}
+            src={`${playback.src}&autoplay=1&mute=${muted ? 1 : 0}`}
             title={listing.title}
-            allow={providerAllow(listing.video.provider)}
+            allow={providerAllow(listing.video?.provider ?? 'youtube')}
             allowFullScreen
           />
+        ) : playback.kind === 'embed' && listing.video ? (
+          // Official IG / FB embed, mounted by their own script.
+          <VideoEmbed video={listing.video} title={listing.title} orientation="vertical" autoStart />
         ) : (
           <div style={{ position: 'absolute', inset: 0, background: listing.photos[0] }} />
+        )}
+
+        {/* Always reachable escape hatch when a provider blocks playback. */}
+        {playback.original && playback.kind !== 'inline' && (
+          <button
+            className="fs-player__open"
+            onClick={() => openOriginal(playback.original)}
+          >
+            {providerActionLabel(playback.provider)}
+          </button>
         )}
 
         <div className="fs-player__bar">
