@@ -83,7 +83,10 @@ export function blankProfile(input: SignUpInput, index: number): Profile {
     email: input.email.trim().toLowerCase(),
     phone: input.phone?.trim() || null,
     emailVerified: false,
-    role: input.email.trim().toLowerCase().startsWith('admin@') ? 'admin' : 'user',
+    // Every new account is a normal user. Admin is granted only by an
+    // operator running SQL against the database — never inferred from the
+    // email address, which any visitor could spoof at signup.
+    role: 'user',
     tier: 'free',
     tierExpiry: null,
     isSeller: false,

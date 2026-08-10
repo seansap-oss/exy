@@ -26,7 +26,8 @@ interface Props {
 
 export function AuthModal({ open, onClose, onAuth, onPendingProfile, reason }: Props) {
   const [mode, setMode] = useState<Mode>('signin');
-  const [form, setForm] = useState({ fullName: '', username: '', email: '', password: '', phone: '' });
+  const [form, setForm] = useState({ fullName: '', username: '', email: '', password: '', confirmPassword: '', phone: '' });
+  const [showPassword, setShowPassword] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [pendingEmail, setPendingEmail] = useState('');
@@ -50,6 +51,10 @@ export function AuthModal({ open, onClose, onAuth, onPendingProfile, reason }: P
     setBusy(true);
 
     if (mode === 'signup') {
+      if (form.password !== form.confirmPassword) {
+        setBusy(false);
+        return setError('Passwords do not match.');
+      }
       const result = await signUp({
         fullName: form.fullName,
         username: form.username.toLowerCase(),
@@ -76,7 +81,7 @@ export function AuthModal({ open, onClose, onAuth, onPendingProfile, reason }: P
     }
     if (result.profile && result.session) {
       onAuth(result.profile, result.session);
-      setForm({ ...form, password: '' });
+      setForm({ ...form, password: '', confirmPassword: '' });
       onClose();
     }
   }
@@ -114,7 +119,7 @@ export function AuthModal({ open, onClose, onAuth, onPendingProfile, reason }: P
     if (!result.ok) return setError(result.error ?? 'Activation failed.');
     if (result.profile && result.session) {
       onAuth(result.profile, result.session);
-      setForm({ fullName: '', username: '', email: '', password: '', phone: '' });
+      setForm({ fullName: '', username: '', email: '', password: '', confirmPassword: '', phone: '' });
       setMode('signin');
       onClose();
     }
@@ -269,18 +274,54 @@ export function AuthModal({ open, onClose, onAuth, onPendingProfile, reason }: P
         <label className="field__label" htmlFor="au-pass">
           Password
         </label>
-        <input
-          id="au-pass"
-          className="input"
-          type="password"
-          value={form.password}
-          onChange={(event) => set('password', event.target.value)}
-          onKeyDown={(event) => event.key === 'Enter' && void submit()}
-          placeholder="••••••••"
-          autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
-        />
-        {mode === 'signup' && <span className="field__hint">Minimum 8 characters. Stored by Supabase Auth.</span>}
+        <div className="pw-wrap">
+          <input
+            id="au-pass"
+            className="input"
+            type={showPassword ? 'text' : 'password'}
+            value={form.password}
+            onChange={(event) => set('password', event.target.value)}
+            onKeyDown={(event) => event.key === 'Enter' && void submit()}
+            placeholder="••••••••"
+            autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
+          />
+          <button
+            type="button"
+            className="pw-toggle"
+            onClick={() => setShowPassword((prev) => !prev)}
+            aria-label={showPassword ? 'Hide password' : 'Show password'}
+          >
+            {showPassword ? 'Hide' : 'Show'}
+          </button>
+        </div>
+        {mode === 'signup' && (
+          <span className="field__hint">
+            Minimum 8 characters — 12 or more recommended. Hashed and stored by Supabase Auth; never saved by EXY.
+          </span>
+        )}
       </div>
+
+      {/* Confirm password — signup only */}
+      {mode === 'signup' && (
+        <div className="field">
+          <label className="field__label" htmlFor="au-pass2">
+            Confirm password
+          </label>
+          <input
+            id="au-pass2"
+            className="input"
+            type={showPassword ? 'text' : 'password'}
+            value={form.confirmPassword}
+            onChange={(event) => set('confirmPassword', event.target.value)}
+            onKeyDown={(event) => event.key === 'Enter' && void submit()}
+            placeholder="••••••••"
+            autoComplete="new-password"
+          />
+          {form.confirmPassword.length > 0 && form.confirmPassword !== form.password && (
+            <span className="field__error">Passwords do not match.</span>
+          )}
+        </div>
+      )}
 
       {mode === 'signup' && (
         <div className="field">
