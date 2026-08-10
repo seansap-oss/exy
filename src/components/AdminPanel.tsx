@@ -131,7 +131,6 @@ export function AdminPanel(props: Props) {
           )}
           {tab === 'bulk' && (
             <BulkImport
-              categories={props.categories}
               sellers={props.sellers}
               listings={props.listings}
               onListings={props.onListings}

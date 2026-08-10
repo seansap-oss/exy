@@ -4,7 +4,7 @@ import { keepSharedUrl, recoverSharedUrl, releaseSharedUrl, type SharePayload } 
 import { readLastLocation, rememberText, writeLastLocation } from '../lib/sellerMemory';
 import { HistorySuggest } from './HistorySuggest';
 import { saveListing } from '../lib/publish';
-import { CATEGORIES } from '../data/categories';
+import { TAXONOMY, subcategoriesOf } from '../data/taxonomy';
 import { parseVideoUrl, providerLabel } from '../lib/embeds';
 import { TIER_LIMITS } from '../lib/payments';
 import { uid } from '../lib/storage';
@@ -74,7 +74,7 @@ export function ExpressPostDrawer({ payload, profile, onClose, onPublish, onNeed
   }, [url]);
 
   const video = useMemo(() => parseVideoUrl(url), [url]);
-  const subs = CATEGORIES.find((category) => category.id === categoryId)?.children ?? [];
+  const subs = categoryId ? subcategoriesOf(categoryId) : [];
 
   if (!payload) return null;
 
@@ -226,7 +226,7 @@ export function ExpressPostDrawer({ payload, profile, onClose, onPublish, onNeed
           <div className="field">
             <span className="field__label">Category</span>
             <div className="chips">
-              {CATEGORIES.map((category) => (
+              {TAXONOMY.map((category) => (
                 <button
                   key={category.id}
                   className={`chip chip--sm${categoryId === category.id ? ' is-on' : ''}`}

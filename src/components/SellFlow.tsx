@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import type { Listing, ListingCondition, NativeMedia, Profile } from '../types';
-import { CATEGORIES, CATEGORY_MAP } from '../data/categories';
+import { TAXONOMY, TAX_MAP, subcategoriesOf, typesOf, attributesOf } from '../data/taxonomy';
 import { parseVideoUrl, providerLabel } from '../lib/embeds';
 import { TIER_LIMITS } from '../lib/payments';
 import { uid } from '../lib/storage';
@@ -51,12 +51,16 @@ export function SellFlow({ open, onClose, profile, activeAdCount, onPublish, onU
     hidePhone: false,
     phone: '',
     tags: [] as string[],
+    typeId: '',
+    attributes: {} as Record<string, string>,
     features: ['', '', ''],
   });
   const [hosted, setHosted] = useState<NativeMedia[]>([]);
   const [error, setError] = useState('');
 
-  const subs = form.categoryId ? (CATEGORY_MAP[form.categoryId]?.children ?? []) : [];
+  const subs = form.categoryId ? subcategoriesOf(form.categoryId) : [];
+  const types = form.categoryId && form.subCategoryId ? typesOf(form.categoryId, form.subCategoryId) : [];
+  const attrDefs = form.categoryId ? attributesOf(form.categoryId) : [];
   const video = useMemo(() => parseVideoUrl(form.videoUrl), [form.videoUrl]);
   const overQuota = activeAdCount >= limits.ads;
 
@@ -93,6 +97,8 @@ export function SellFlow({ open, onClose, profile, activeAdCount, onPublish, onU
       categoryId: form.categoryId,
       subCategoryId: form.subCategoryId,
       tags: form.tags,
+      typeId: form.typeId || undefined,
+      attributes: Object.keys(form.attributes).length ? form.attributes : undefined,
       features: form.features.map((f) => f.trim()).filter(Boolean),
       location: form.location.trim() || `${form.city.trim()}, India`,
       region: 'india',
@@ -150,6 +156,8 @@ export function SellFlow({ open, onClose, profile, activeAdCount, onPublish, onU
       hidePhone: false,
       phone: '',
       tags: [],
+      typeId: '',
+      attributes: {},
       features: ['', '', ''],
     });
     setHosted([]);
@@ -217,7 +225,7 @@ export function SellFlow({ open, onClose, profile, activeAdCount, onPublish, onU
           <div className="field">
             <span className="field__label">Broad category</span>
             <div className="chips">
-              {CATEGORIES.map((category) => (
+              {TAXONOMY.map((category) => (
                 <button
                   key={category.id}
                   className={`chip${form.categoryId === category.id ? ' is-on' : ''}`}
@@ -244,20 +252,63 @@ export function SellFlow({ open, onClose, profile, activeAdCount, onPublish, onU
               </div>
             </div>
           )}
-          {form.subCategoryId && (
+          {/* Type — third taxonomy level */}
+          {types.length > 0 && (
             <div className="field">
-              <span className="field__label">Tags (helps buyers find you)</span>
+              <span className="field__label">Type</span>
               <div className="chips">
-                {(subs.find((s) => s.id === form.subCategoryId)?.tags ?? []).map((tag) => (
+                {types.map((type) => (
                   <button
-                    key={tag}
-                    className={`chip chip--sm${form.tags.includes(tag) ? ' is-on' : ''}`}
-                    onClick={() =>
-                      set('tags', form.tags.includes(tag) ? form.tags.filter((t) => t !== tag) : [...form.tags, tag])
-                    }
+                    key={type.id}
+                    className={`chip chip--sm${form.typeId === type.id ? ' is-on' : ''}`}
+                    onClick={() => set('typeId', form.typeId === type.id ? '' : type.id)}
                   >
-                    {tag}
+                    {type.name}
                   </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Dynamic, category-specific attributes from the shared taxonomy */}
+          {attrDefs.length > 0 && (
+            <div className="field">
+              <span className="field__label">{TAX_MAP[form.categoryId]?.name} details</span>
+              <div className="form-grid form-grid--3">
+                {attrDefs.map((attr) => (
+                  <div className="field" key={attr.key}>
+                    <label className="field__label" htmlFor={`sf-${attr.key}`}>
+                      {attr.label}
+                      {attr.unit ? ` (${attr.unit})` : ''}
+                    </label>
+                    {attr.options?.length ? (
+                      <select
+                        id={`sf-${attr.key}`}
+                        className="select"
+                        value={form.attributes[attr.key] ?? ''}
+                        onChange={(event) =>
+                          set('attributes', { ...form.attributes, [attr.key]: event.target.value })
+                        }
+                      >
+                        <option value="">Not specified</option>
+                        {attr.options.map((option) => (
+                          <option key={option} value={option}>
+                            {option}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input
+                        id={`sf-${attr.key}`}
+                        className="input"
+                        type={attr.input === 'number' ? 'number' : 'text'}
+                        value={form.attributes[attr.key] ?? ''}
+                        onChange={(event) =>
+                          set('attributes', { ...form.attributes, [attr.key]: event.target.value })
+                        }
+                      />
+                    )}
+                  </div>
                 ))}
               </div>
             </div>
@@ -567,7 +618,7 @@ export function SellFlow({ open, onClose, profile, activeAdCount, onPublish, onU
             <div className="meta-list">
               <div className="meta-item">
                 <span>Category</span>
-                <b>{CATEGORY_MAP[form.categoryId]?.name ?? '—'}</b>
+                <b>{TAX_MAP[form.categoryId]?.name ?? '—'}</b>
               </div>
               <div className="meta-item">
                 <span>Subcategory</span>

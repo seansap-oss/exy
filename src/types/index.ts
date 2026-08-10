@@ -137,6 +137,10 @@ export interface Listing {
   negotiable: boolean;
   categoryId: string;
   subCategoryId: string;
+  /** Third taxonomy level (shared taxonomy). */
+  typeId?: string;
+  /** Category-specific attribute values (jsonb column). */
+  attributes?: Record<string, string>;
   tags: string[];
   features: string[];
   location: string;

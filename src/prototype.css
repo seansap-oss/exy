@@ -5337,3 +5337,14 @@ select.bulk-input {
 .bulk-row--ok td {
   background: var(--success-soft);
 }
+
+/* Bulk import details drawer */
+.bulk-details td {
+  background: var(--surface-2);
+  padding: 14px 16px;
+}
+
+.bulk-details__body {
+  border-left: 3px solid var(--accent);
+  padding-left: 14px;
+}

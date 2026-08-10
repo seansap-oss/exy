@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Listing, SearchFilters, Seller } from '../types';
-import { CATEGORIES, CATEGORY_MAP } from '../data/categories';
+import { CATEGORY_MAP } from '../data/categories';
+import { breadcrumb as taxBreadcrumb, TAXONOMY, TAX_MAP, filterableAttributes, subcategoriesOf } from '../data/taxonomy';
 import { inr } from '../lib/format';
 import { applyFilters, EMPTY_FILTERS } from '../lib/search';
 import { Modal, Switch } from './Ui';
@@ -18,6 +19,15 @@ interface Props {
   onSeeAll: () => void;
 }
 
+/**
+ * Breadcrumb for a result row. Prefers the shared taxonomy; falls back to the
+ * legacy category list so existing listings keep rendering.
+ */
+function searchCrumb(listing: Listing): string {
+  const tax = taxBreadcrumb(listing.categoryId, listing.subCategoryId);
+  if (tax.length) return tax.join(' > ');
+  return CATEGORY_MAP[listing.categoryId]?.name ?? 'Uncategorised';
+}
 export function SearchModal({
   open,
   onClose,
@@ -31,6 +41,7 @@ export function SearchModal({
 }: Props) {
   const [draft, setDraft] = useState<SearchFilters>(filters);
   const [geoState, setGeoState] = useState<'idle' | 'asking' | 'granted' | 'denied'>('idle');
+  const [attrFilters, setAttrFilters] = useState<Record<string, string>>({});
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -40,8 +51,18 @@ export function SearchModal({
     }
   }, [open, filters]);
 
-  const results = useMemo(() => applyFilters(listings, draft, sellerMap), [listings, draft, sellerMap]);
-  const subs = draft.categoryId ? (CATEGORY_MAP[draft.categoryId]?.children ?? []) : [];
+  const results = useMemo(() => {
+    const base = applyFilters(listings, draft, sellerMap);
+    const active = Object.entries(attrFilters).filter(([, value]) => value);
+    if (!active.length) return base;
+    // Attribute values live on listing.attributes (jsonb) once migration 005
+    // is applied; rows without the field simply do not match.
+    return base.filter((listing) => {
+      const bag = (listing as unknown as { attributes?: Record<string, string> }).attributes ?? {};
+      return active.every(([key, value]) => String(bag[key] ?? '').toLowerCase() === value.toLowerCase());
+    });
+  }, [listings, draft, sellerMap, attrFilters]);
+  const subs = draft.categoryId ? subcategoriesOf(draft.categoryId) : [];
 
   const set = <K extends keyof SearchFilters>(key: K, value: SearchFilters[K]) =>
     setDraft((prev) => ({ ...prev, [key]: value }));
@@ -102,7 +123,7 @@ export function SearchModal({
               onChange={(event) => setDraft((prev) => ({ ...prev, categoryId: event.target.value, subCategoryId: '' }))}
             >
               <option value="">All categories</option>
-              {CATEGORIES.map((category) => (
+              {TAXONOMY.map((category) => (
                 <option key={category.id} value={category.id}>
                   {category.name}
                 </option>
@@ -208,6 +229,33 @@ export function SearchModal({
             </div>
           </div>
 
+          {/* Dynamic, category-specific filters from the shared taxonomy. */}
+          {draft.categoryId && TAX_MAP[draft.categoryId] && (
+            <div className="filter-group">
+              <div className="filter-group__title">{TAX_MAP[draft.categoryId].name} filters</div>
+              {filterableAttributes(draft.categoryId).map((attr) =>
+                attr.options?.length ? (
+                  <select
+                    key={attr.key}
+                    className="select"
+                    style={{ marginBottom: 8 }}
+                    value={attrFilters[attr.key] ?? ''}
+                    onChange={(event) =>
+                      setAttrFilters((prev) => ({ ...prev, [attr.key]: event.target.value }))
+                    }
+                  >
+                    <option value="">{attr.label}: any</option>
+                    {attr.options.map((option) => (
+                      <option key={option} value={option}>
+                        {attr.label}: {option}
+                      </option>
+                    ))}
+                  </select>
+                ) : null,
+              )}
+            </div>
+          )}
+
           <div className="filter-group">
             <div className="filter-group__title">Condition</div>
             <select
@@ -286,7 +334,7 @@ export function SearchModal({
                 <span className="result-row__main">
                   <b>{listing.title}</b>
                   <span>
-                    {CATEGORY_MAP[listing.categoryId]?.name} · {listing.location}
+                    {searchCrumb(listing)} - {listing.location}
                   </span>
                 </span>
                 <span className="result-row__price">{inr(listing.price)}</span>

@@ -14,6 +14,8 @@ export function rowToListing(row: any): Listing {
     negotiable: row.negotiable ?? true,
     categoryId: row.category_id ?? '',
     subCategoryId: row.subcategory_id ?? '',
+    typeId: row.type_id ?? undefined,
+    attributes: row.attributes ?? undefined,
     tags: row.tags ?? [],
     features: row.features ?? [],
     location: row.location ?? 'India',
@@ -101,6 +103,8 @@ export function listingToRow(listing: Listing) {
  */
 export function providerColumns(listing: Listing) {
   return {
+    type_id: listing.typeId ?? null,
+    attributes: listing.attributes ?? {},
     provider: listing.video?.provider ?? null,
     provider_media_id: listing.video?.externalId ?? null,
     video_url: listing.video?.url ?? null,

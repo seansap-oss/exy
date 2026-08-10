@@ -1,9 +1,11 @@
-import { useMemo, useState } from 'react';
-import type { Category, Listing, Seller } from '../types';
+import { Fragment, useMemo, useState } from 'react';
+import type { Listing, Seller } from '../types';
 import { parseVideoUrl } from '../lib/embeds';
 import { saveListing, validateForPublish } from '../lib/publish';
 import { uid } from '../lib/storage';
-import { IconCheck, IconClose, IconPlus, IconTrash } from './Icons';
+import { IconCheck, IconChevron, IconClose, IconPlus, IconTrash } from './Icons';
+import { TaxonomyPicker, type TaxonomySelection } from './TaxonomyPicker';
+import { TAXONOMY } from '../data/taxonomy';
 
 const MAX_ROWS = 20;
 const ROW_BATCH = 10;
@@ -13,6 +15,10 @@ interface Row {
   url: string;
   title: string;
   categoryId: string;
+  subCategoryId: string;
+  typeId: string;
+  attributes: Record<string, string>;
+  open: boolean;
   price: string;
   city: string;
   description: string;
@@ -29,6 +35,10 @@ function blankRow(): Row {
     url: '',
     title: '',
     categoryId: '',
+    subCategoryId: '',
+    typeId: '',
+    attributes: {},
+    open: false,
     price: '',
     city: '',
     description: '',
@@ -40,7 +50,6 @@ function blankRow(): Row {
 }
 
 interface Props {
-  categories: Category[];
   sellers: Seller[];
   listings: Listing[];
   onListings: (listings: Listing[]) => void;
@@ -52,7 +61,7 @@ interface Props {
  * form, so provider ids stay in text columns and seller_id is always taken
  * from the authenticated session.
  */
-export function BulkImport({ categories, sellers, listings, onListings, onToast }: Props) {
+export function BulkImport({ sellers, listings, onListings, onToast }: Props) {
   const [rows, setRows] = useState<Row[]>(() => Array.from({ length: ROW_BATCH }, blankRow));
   const [running, setRunning] = useState(false);
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
@@ -64,6 +73,14 @@ export function BulkImport({ categories, sellers, listings, onListings, onToast 
     setRows((prev) => prev.map((row) => (row.key === key ? { ...row, ...next } : row)));
 
   const filled = useMemo(() => rows.filter((row) => row.url.trim() || row.title.trim()), [rows]);
+
+  // Summary required by the approved design.
+  const counts = useMemo(() => {
+    const empty = rows.length - filled.length;
+    const attention = rows.filter((row) => row.error).length;
+    const ready = filled.filter((row) => !row.error && !row.publishedId).length;
+    return { total: rows.length, ready, attention, empty };
+  }, [rows, filled]);
 
   function addRows() {
     setRows((prev) => {
@@ -93,7 +110,7 @@ export function BulkImport({ categories, sellers, listings, onListings, onToast 
       price: Number(row.price) || 0,
       negotiable: true,
       categoryId: row.categoryId,
-      subCategoryId: categories.find((c) => c.id === row.categoryId)?.children[0]?.id ?? '',
+      subCategoryId: row.subCategoryId,
       tags: [],
       features: [],
       location: row.city.trim(),
@@ -203,6 +220,10 @@ export function BulkImport({ categories, sellers, listings, onListings, onToast 
           Clear empty rows
         </button>
         <span className="toolbar__spacer" />
+        <span className="badge badge--soft">Total {counts.total}</span>
+        <span className="badge badge--soft">Ready {counts.ready}</span>
+        {counts.attention > 0 && <span className="badge badge--soft" style={{ color: 'var(--danger)' }}>Attention {counts.attention}</span>}
+        <span className="badge badge--soft">Empty {counts.empty}</span>
         {progress && (
           <span className="badge badge--soft">
             {progress.done} of {progress.total} processed
@@ -248,7 +269,8 @@ export function BulkImport({ categories, sellers, listings, onListings, onToast 
             {rows.map((row, index) => {
               const detected = row.url.trim() ? parseVideoUrl(row.url.trim()) : null;
               return (
-                <tr key={row.key} className={row.error ? 'bulk-row--error' : row.publishedId ? 'bulk-row--ok' : ''}>
+                <Fragment key={row.key}>
+                <tr className={row.error ? 'bulk-row--error' : row.publishedId ? 'bulk-row--ok' : ''}>
                   <td style={{ color: 'var(--ink-3)', fontSize: 11 }}>{index + 1}</td>
                   <td>
                     <input
@@ -280,7 +302,7 @@ export function BulkImport({ categories, sellers, listings, onListings, onToast 
                       disabled={row.busy || Boolean(row.publishedId)}
                     >
                       <option value="">Select…</option>
-                      {categories.map((category) => (
+                      {TAXONOMY.map((category) => (
                         <option key={category.id} value={category.id}>
                           {category.name}
                         </option>
@@ -327,16 +349,54 @@ export function BulkImport({ categories, sellers, listings, onListings, onToast 
                     {!row.busy && !row.publishedId && !row.error && <span style={{ color: 'var(--ink-3)', fontSize: 11 }}>Ready</span>}
                   </td>
                   <td>
-                    <button
-                      className="btn btn--danger btn--sm"
-                      onClick={() => setRows((prev) => prev.filter((item) => item.key !== row.key))}
-                      disabled={running}
-                      aria-label="Remove row"
-                    >
-                      <IconTrash size={12} />
-                    </button>
+                    <div style={{ display: 'flex', gap: 4 }}>
+                      <button
+                        className={`chip chip--sm${row.open ? ' is-on' : ''}`}
+                        onClick={() => patch(row.key, { open: !row.open })}
+                        aria-label="Row details"
+                        title="Full listing details"
+                      >
+                        <span style={{ display: 'grid', transform: row.open ? 'rotate(90deg)' : 'none' }}>
+                          <IconChevron size={12} />
+                        </span>
+                      </button>
+                      <button
+                        className="btn btn--danger btn--sm"
+                        onClick={() => setRows((prev) => prev.filter((item) => item.key !== row.key))}
+                        disabled={running}
+                        aria-label="Remove row"
+                      >
+                        <IconTrash size={12} />
+                      </button>
+                    </div>
                   </td>
                 </tr>
+                {row.open && (
+                  <tr className="bulk-details">
+                    <td colSpan={9}>
+                      <div className="bulk-details__body">
+                        <TaxonomyPicker
+                          value={{
+                            categoryId: row.categoryId,
+                            subCategoryId: row.subCategoryId,
+                            typeId: row.typeId,
+                            attributes: row.attributes,
+                          }}
+                          onChange={(next: TaxonomySelection) =>
+                            patch(row.key, {
+                              categoryId: next.categoryId,
+                              subCategoryId: next.subCategoryId,
+                              typeId: next.typeId,
+                              attributes: next.attributes,
+                            })
+                          }
+                          variant="compact"
+                        />
+                      </div>
+                    </td>
+                  </tr>
+                )}
+                </Fragment>
               );
             })}
           </tbody>
