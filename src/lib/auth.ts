@@ -241,8 +241,19 @@ export async function signIn(email: string, password: string): Promise<AuthResul
   return { ok: true, profile: account.profile, session: newSession(account.profile.id, account.profile.role) };
 }
 
-export async function signOut(): Promise<void> {
-  if (isSupabaseLive && supabase) await supabase.auth.signOut();
+/**
+ * Ends the Supabase session. Returns the real outcome so the caller never
+ * clears local state — or claims success — on a failed sign-out.
+ */
+export async function signOut(): Promise<{ ok: boolean; error?: string }> {
+  if (!isSupabaseLive || !supabase) return { ok: true };
+  try {
+    const { error } = await supabase.auth.signOut();
+    if (error) return { ok: false, error: error.message };
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : 'Network error' };
+  }
 }
 
 /** Re-sends the Supabase confirmation email for an unconfirmed account. */

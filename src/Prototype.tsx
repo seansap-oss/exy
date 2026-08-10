@@ -744,12 +744,19 @@ export default function Prototype() {
               setAuthOpen(true);
             }}
             onSignOut={() => {
-              void authSignOut();
-              setProfile(null);
-              setSession(null);
-              save('session', null);
-              toast('Signed out', 'info');
-              go({ name: 'home' });
+              // Await Supabase before clearing state: on failure the session
+              // must stay intact and the real error is surfaced.
+              void authSignOut().then((result) => {
+                if (!result.ok) {
+                  toast(`Log out failed: ${result.error}`, 'err');
+                  return;
+                }
+                setProfile(null);
+                setSession(null);
+                save('session', null);
+                toast('You have been logged out', 'ok');
+                go({ name: 'home' });
+              });
             }}
             onSell={handleSellClick}
             onUpdateListings={setListings}
@@ -2153,6 +2160,10 @@ function ProfileView({
                 <IconStore size={15} /> My storefront
               </button>
             )}
+            {/* Always visible on every Profile tab, not buried in Settings. */}
+            <button className="btn btn--danger btn--sm" onClick={onSignOut}>
+              <IconLock size={15} /> Log out
+            </button>
           </div>
         </div>
 
