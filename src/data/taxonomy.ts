@@ -1,10 +1,10 @@
 /**
- * EXY shared taxonomy — the single source used by the website, Android app,
- * share drawer, single-listing form, bulk importer, search and the database
- * seed in supabase/migrations/006_taxonomy_seed.sql.
+ * EXY shared taxonomy — single source for website, Android app, share drawer,
+ * single-listing form, bulk importer, search and the database seed
+ * (supabase/migrations/006_taxonomy_seed.sql).
  *
- * Stable ids are deliberate: listings.category_id / subcategory_id / type_id
- * store these strings, so renaming a label never orphans a listing.
+ * Stable text ids are deliberate: listings.category_id / subcategory_id /
+ * type_id store these strings, so renaming a label never orphans a listing.
  */
 
 export type AttrInput = 'text' | 'number' | 'select' | 'multiselect' | 'boolean' | 'range';
@@ -22,12 +22,10 @@ export interface AttrDef {
 export interface TaxNode {
   id: string;
   name: string;
-  /** subcategory → type → brand */
   children?: TaxNode[];
 }
 
 export interface MainCategory extends TaxNode {
-  /** Attribute definitions inherited by every listing in this category. */
   attributes: AttrDef[];
 }
 
@@ -40,108 +38,68 @@ const CONDITION: AttrDef = {
 };
 
 /* ========================================================================== */
-/* 12 main categories                                                          */
+/* 14 MAIN CATEGORIES                                                          */
 /* ========================================================================== */
 export const TAXONOMY: MainCategory[] = [
-  {
-    id: 'mobiles',
-    name: 'Mobiles & Tablets',
-    attributes: [
-      CONDITION,
-      { key: 'brand', label: 'Brand', input: 'select', options: ['Apple', 'Samsung', 'Xiaomi', 'OnePlus', 'Realme', 'Vivo', 'Oppo', 'Google', 'Motorola', 'Nothing', 'Other'], filterable: true },
-      { key: 'storage', label: 'Storage', input: 'select', options: ['32GB', '64GB', '128GB', '256GB', '512GB', '1TB'], filterable: true },
-      { key: 'ram', label: 'RAM', input: 'select', options: ['2GB', '4GB', '6GB', '8GB', '12GB', '16GB'], filterable: true },
-      { key: 'warranty', label: 'Under warranty', input: 'boolean' },
-    ],
-    children: [
-      { id: 'mob-phones', name: 'Mobile Phones', children: [
-        { id: 'mob-smart', name: 'Smartphones' }, { id: 'mob-feature', name: 'Feature Phones' },
-        { id: 'mob-refurb', name: 'Refurbished Phones' } ] },
-      { id: 'mob-tablets', name: 'Tablets', children: [
-        { id: 'mob-ipad', name: 'iPad' }, { id: 'mob-android-tab', name: 'Android Tablets' } ] },
-      { id: 'mob-wearables', name: 'Smart Watches & Wearables' },
-      { id: 'mob-accessories', name: 'Accessories', children: [
-        { id: 'mob-cases', name: 'Cases & Covers' }, { id: 'mob-chargers', name: 'Chargers & Cables' },
-        { id: 'mob-powerbank', name: 'Power Banks' } ] },
-      { id: 'mob-repair', name: 'Mobile Repair & Services' },
-    ],
-  },
-  {
-    id: 'computers',
-    name: 'Computers, Laptops & IT',
-    attributes: [
-      CONDITION,
-      { key: 'ram', label: 'RAM', input: 'select', options: ['4GB', '8GB', '16GB', '32GB', '64GB', '128GB'], filterable: true },
-      { key: 'storage', label: 'Storage', input: 'select', options: ['128GB SSD', '256GB SSD', '512GB SSD', '1TB SSD', '2TB SSD', '1TB HDD', '2TB HDD'], filterable: true },
-      { key: 'processor', label: 'Processor', input: 'select', options: ['Intel i3', 'Intel i5', 'Intel i7', 'Intel i9', 'AMD Ryzen 3', 'AMD Ryzen 5', 'AMD Ryzen 7', 'AMD Ryzen 9', 'Apple M1', 'Apple M2', 'Apple M3', 'Apple M4', 'Other'], filterable: true },
-      { key: 'os', label: 'Operating system', input: 'select', options: ['Windows 11', 'Windows 10', 'macOS', 'ChromeOS', 'Linux', 'None'], filterable: true },
-      { key: 'screen_size', label: 'Screen size', input: 'number', unit: 'inch', filterable: true },
-      { key: 'graphics', label: 'Graphics card', input: 'text' },
-    ],
-    children: [
-      { id: 'cmp-laptops', name: 'Laptops', children: [
-        { id: 'cmp-mba', name: 'MacBook Air' }, { id: 'cmp-mbp', name: 'MacBook Pro' },
-        { id: 'cmp-win-laptop', name: 'Windows Laptops' }, { id: 'cmp-gaming-laptop', name: 'Gaming Laptops' },
-        { id: 'cmp-chromebook', name: 'Chromebooks' } ] },
-      { id: 'cmp-desktops', name: 'Desktop Computers', children: [
-        { id: 'cmp-gaming-pc', name: 'Gaming PCs' }, { id: 'cmp-imac', name: 'iMac' },
-        { id: 'cmp-mac-mini', name: 'Mac Mini' }, { id: 'cmp-mac-studio', name: 'Mac Studio' },
-        { id: 'cmp-mac-pro', name: 'Mac Pro' }, { id: 'cmp-workstation', name: 'Workstations' } ] },
-      { id: 'cmp-peripherals', name: 'Peripherals', children: [
-        { id: 'cmp-monitors', name: 'Monitors' }, { id: 'cmp-keyboards', name: 'Keyboards' },
-        { id: 'cmp-mice', name: 'Mice' }, { id: 'cmp-printers', name: 'Printers' },
-        { id: 'cmp-scanners', name: 'Scanners' }, { id: 'cmp-webcams', name: 'Webcams' } ] },
-      { id: 'cmp-networking', name: 'Networking', children: [
-        { id: 'cmp-routers', name: 'Routers' }, { id: 'cmp-switches', name: 'Network Switches' },
-        { id: 'cmp-nas', name: 'NAS' } ] },
-      { id: 'cmp-components', name: 'Components', children: [
-        { id: 'cmp-ssd', name: 'SSDs' }, { id: 'cmp-hdd', name: 'Hard Drives' },
-        { id: 'cmp-ram', name: 'RAM' }, { id: 'cmp-cpu', name: 'Processors' },
-        { id: 'cmp-gpu', name: 'Graphics Cards' }, { id: 'cmp-mobo', name: 'Motherboards' },
-        { id: 'cmp-battery', name: 'Laptop Batteries' }, { id: 'cmp-screen', name: 'Laptop Screens' } ] },
-      { id: 'cmp-services', name: 'IT Services', children: [
-        { id: 'cmp-repair', name: 'Computer Repair' }, { id: 'cmp-support', name: 'IT Support' },
-        { id: 'cmp-webdev', name: 'Website Development' } ] },
-    ],
-  },
+
+  /* 1. ELECTRONICS, COMPUTERS & TECHNOLOGY ================================== */
   {
     id: 'electronics',
-    name: 'Electronics & Appliances',
+    name: 'Electronics, Computers & Technology',
     attributes: [
       CONDITION,
       { key: 'brand', label: 'Brand', input: 'text', filterable: true },
+      { key: 'model', label: 'Model', input: 'text', filterable: true },
+      { key: 'ram', label: 'RAM', input: 'select', options: ['2GB', '4GB', '8GB', '16GB', '32GB', '64GB', '128GB'], filterable: true },
+      { key: 'storage', label: 'Storage', input: 'select', options: ['32GB', '64GB', '128GB', '256GB', '512GB', '1TB', '2TB'], filterable: true },
+      { key: 'processor', label: 'Processor', input: 'select', options: ['Intel i3', 'Intel i5', 'Intel i7', 'Intel i9', 'AMD Ryzen 3', 'AMD Ryzen 5', 'AMD Ryzen 7', 'AMD Ryzen 9', 'Apple M1', 'Apple M2', 'Apple M3', 'Apple M4', 'Snapdragon', 'MediaTek', 'Other'], filterable: true },
+      { key: 'screen_size', label: 'Screen size', input: 'number', unit: 'inch', filterable: true },
+      { key: 'graphics', label: 'Graphics card', input: 'text' },
       { key: 'warranty', label: 'Under warranty', input: 'boolean' },
-      { key: 'energy_rating', label: 'Energy rating', input: 'select', options: ['5 Star', '4 Star', '3 Star', '2 Star', '1 Star'], filterable: true },
+      { key: 'color', label: 'Color', input: 'text', filterable: true },
     ],
     children: [
-      { id: 'ele-tv', name: 'TV & Video', children: [
-        { id: 'ele-tvs', name: 'TVs' }, { id: 'ele-soundbar', name: 'Soundbars' },
-        { id: 'ele-hometheatre', name: 'Home Theatres' }, { id: 'ele-projector', name: 'Projectors' } ] },
-      { id: 'ele-audio', name: 'Audio', children: [
-        { id: 'ele-speakers', name: 'Speakers' }, { id: 'ele-headphones', name: 'Headphones' },
-        { id: 'ele-earbuds', name: 'Earbuds' } ] },
-      { id: 'ele-cameras', name: 'Cameras', children: [
-        { id: 'ele-camera', name: 'Cameras' }, { id: 'ele-lenses', name: 'Lenses' },
-        { id: 'ele-drones', name: 'Drones' } ] },
-      { id: 'ele-gaming', name: 'Gaming Consoles' },
-      { id: 'ele-smarthome', name: 'Smart Home Devices' },
-      { id: 'ele-kitchen', name: 'Kitchen Appliances', children: [
-        { id: 'ele-microwave', name: 'Microwaves' }, { id: 'ele-airfryer', name: 'Air Fryers' },
-        { id: 'ele-mixer', name: 'Mixers' }, { id: 'ele-coffee', name: 'Coffee Machines' },
-        { id: 'ele-purifier', name: 'Water Purifiers' } ] },
-      { id: 'ele-large', name: 'Large Appliances', children: [
-        { id: 'ele-ac', name: 'Air Conditioners' }, { id: 'ele-fridge', name: 'Refrigerators' },
-        { id: 'ele-washing', name: 'Washing Machines' } ] },
-      { id: 'ele-power', name: 'Power & Energy', children: [
-        { id: 'ele-inverter', name: 'Inverters' }, { id: 'ele-batteries', name: 'Batteries' },
-        { id: 'ele-solar', name: 'Solar Panels' }, { id: 'ele-generator', name: 'Generators' } ] },
+      { id: 'ele-mobile-phones', name: 'Mobile Phones' },
+      { id: 'ele-smartphones', name: 'Smartphones' },
+      { id: 'ele-tablets', name: 'Tablets' },
+      { id: 'ele-laptops', name: 'Laptops' },
+      { id: 'ele-macbooks', name: 'MacBooks' },
+      { id: 'ele-desktops', name: 'Desktop Computers' },
+      { id: 'ele-gaming-pcs', name: 'Gaming PCs' },
+      { id: 'ele-monitors', name: 'Monitors' },
+      { id: 'ele-accessories', name: 'Computer Accessories' },
+      { id: 'ele-keyboards', name: 'Keyboards' },
+      { id: 'ele-mice', name: 'Mice' },
+      { id: 'ele-webcams', name: 'Webcams' },
+      { id: 'ele-printers', name: 'Printers & Scanners' },
+      { id: 'ele-networking', name: 'Routers & Networking' },
+      { id: 'ele-components', name: 'Computer Components', children: [
+        { id: 'ele-cpus', name: 'CPUs' }, { id: 'ele-gpus', name: 'GPUs' },
+        { id: 'ele-ram', name: 'RAM' }, { id: 'ele-motherboards', name: 'Motherboards' },
+        { id: 'ele-storage-drives', name: 'Storage Drives' }, { id: 'ele-psu', name: 'Power Supplies' } ] },
+      { id: 'ele-consoles', name: 'Gaming Consoles' },
+      { id: 'ele-gaming-acc', name: 'Gaming Accessories' },
+      { id: 'ele-tvs', name: 'Televisions' },
+      { id: 'ele-cameras', name: 'Cameras' },
+      { id: 'ele-lenses', name: 'Lenses' },
+      { id: 'ele-audio', name: 'Audio Equipment' },
+      { id: 'ele-headphones', name: 'Headphones & Earbuds' },
+      { id: 'ele-speakers', name: 'Speakers' },
+      { id: 'ele-smartwatches', name: 'Smartwatches' },
+      { id: 'ele-wearables', name: 'Wearables' },
+      { id: 'ele-cables', name: 'Cables & Chargers' },
+      { id: 'ele-software', name: 'Software' },
+      { id: 'ele-it-services', name: 'IT Services' },
+      { id: 'ele-repairs', name: 'Repairs & Technical Support' },
     ],
   },
+
+  /* 2. VEHICLES ============================================================ */
   {
     id: 'vehicles',
     name: 'Vehicles',
     attributes: [
-      { key: 'brand', label: 'Brand', input: 'text', required: true, filterable: true },
+      { key: 'make', label: 'Make', input: 'text', required: true, filterable: true },
       { key: 'model', label: 'Model', input: 'text', filterable: true },
       { key: 'year', label: 'Year', input: 'number', filterable: true },
       { key: 'mileage', label: 'Mileage', input: 'number', unit: 'km', filterable: true },
@@ -149,30 +107,24 @@ export const TAXONOMY: MainCategory[] = [
       { key: 'transmission', label: 'Transmission', input: 'select', options: ['Manual', 'Automatic', 'AMT', 'CVT', 'DCT'], filterable: true },
       { key: 'ownership', label: 'Ownership', input: 'select', options: ['1st owner', '2nd owner', '3rd owner', '4th or more'], filterable: true },
       { key: 'registration', label: 'Registration location', input: 'text' },
+      { key: 'color', label: 'Color', input: 'text', filterable: true },
     ],
     children: [
-      { id: 'veh-cars', name: 'Cars', children: [
-        { id: 'veh-hatchback', name: 'Hatchbacks' }, { id: 'veh-sedan', name: 'Sedans' },
-        { id: 'veh-suv', name: 'SUVs' }, { id: 'veh-muv', name: 'MUVs' },
-        { id: 'veh-ev-car', name: 'Electric Cars' } ] },
-      { id: 'veh-bikes', name: 'Motorcycles', children: [
-        { id: 'veh-sports', name: 'Sports Bikes' }, { id: 'veh-cruiser', name: 'Cruisers' },
-        { id: 'veh-commuter', name: 'Commuter Bikes' } ] },
-      { id: 'veh-scooters', name: 'Scooters', children: [
-        { id: 'veh-petrol-scooter', name: 'Petrol Scooters' }, { id: 'veh-ev-scooter', name: 'Electric Scooters' } ] },
-      { id: 'veh-bicycles', name: 'Bicycles' },
-      { id: 'veh-commercial', name: 'Commercial Vehicles', children: [
-        { id: 'veh-trucks', name: 'Trucks' }, { id: 'veh-vans', name: 'Vans' }, { id: 'veh-buses', name: 'Buses' } ] },
-      { id: 'veh-parts', name: 'Spare Parts & Accessories', children: [
-        { id: 'veh-tyres', name: 'Tyres' }, { id: 'veh-batteries', name: 'Batteries' },
-        { id: 'veh-helmets', name: 'Helmets' } ] },
-      { id: 'veh-services', name: 'Vehicle Services' },
-      { id: 'veh-rentals', name: 'Rentals' },
+      { id: 'veh-cars', name: 'Cars' }, { id: 'veh-motorcycles', name: 'Motorcycles' },
+      { id: 'veh-scooters', name: 'Scooters' }, { id: 'veh-bicycles', name: 'Bicycles' },
+      { id: 'veh-ev', name: 'Electric Vehicles' }, { id: 'veh-trucks', name: 'Trucks' },
+      { id: 'veh-vans', name: 'Vans' }, { id: 'veh-commercial', name: 'Commercial Vehicles' },
+      { id: 'veh-auto-parts', name: 'Auto Parts' }, { id: 'veh-bike-parts', name: 'Motorcycle Parts' },
+      { id: 'veh-tyres', name: 'Tyres & Wheels' }, { id: 'veh-acc', name: 'Vehicle Accessories' },
+      { id: 'veh-services', name: 'Vehicle Services' }, { id: 'veh-rentals', name: 'Car Rentals' },
+      { id: 'veh-finance', name: 'Vehicle Finance' },
     ],
   },
+
+  /* 3. PROPERTY & REAL ESTATE ============================================== */
   {
     id: 'property',
-    name: 'Property',
+    name: 'Property & Real Estate',
     attributes: [
       { key: 'listing_type', label: 'Sale or rent', input: 'select', options: ['For sale', 'For rent', 'PG / Shared'], required: true, filterable: true },
       { key: 'bedrooms', label: 'Bedrooms', input: 'select', options: ['1', '2', '3', '4', '5+'], filterable: true },
@@ -181,75 +133,79 @@ export const TAXONOMY: MainCategory[] = [
       { key: 'furnishing', label: 'Furnishing', input: 'select', options: ['Unfurnished', 'Semi-furnished', 'Fully furnished'], filterable: true },
       { key: 'parking', label: 'Parking', input: 'select', options: ['None', '1', '2', '3+'], filterable: true },
       { key: 'floor', label: 'Floor', input: 'text' },
+      { key: 'facing', label: 'Facing', input: 'text' },
+      { key: 'age', label: 'Property age', input: 'text' },
+      { key: 'owner_type', label: 'Ownership', input: 'select', options: ['Freehold', 'Leasepower', 'Power of attorney'], filterable: true },
     ],
     children: [
-      { id: 'prp-residential', name: 'Residential', children: [
-        { id: 'prp-house', name: 'Houses' }, { id: 'prp-apartment', name: 'Apartments' },
-        { id: 'prp-villa', name: 'Villas' }, { id: 'prp-flat', name: 'Flats' },
-        { id: 'prp-room', name: 'Rooms' } ] },
-      { id: 'prp-shared', name: 'PG & Hostels', children: [
-        { id: 'prp-pg', name: 'PG' }, { id: 'prp-hostel', name: 'Hostels' } ] },
-      { id: 'prp-commercial', name: 'Commercial', children: [
-        { id: 'prp-shop', name: 'Shops' }, { id: 'prp-office', name: 'Offices' },
-        { id: 'prp-showroom', name: 'Showrooms' }, { id: 'prp-warehouse', name: 'Warehouses' },
-        { id: 'prp-hotel', name: 'Hotels' } ] },
-      { id: 'prp-land', name: 'Land & Plots', children: [
-        { id: 'prp-plot', name: 'Plots' }, { id: 'prp-agri-land', name: 'Agricultural Land' } ] },
-      { id: 'prp-services', name: 'Property Services' },
+      { id: 'prp-house-sale', name: 'Houses for Sale' }, { id: 'prp-apt-sale', name: 'Apartments for Sale' },
+      { id: 'prp-house-rent', name: 'Houses for Rent' }, { id: 'prp-apt-rent', name: 'Apartments for Rent' },
+      { id: 'prp-rooms', name: 'Rooms & Flatmates' }, { id: 'prp-land', name: 'Land & Plots' },
+      { id: 'prp-commercial', name: 'Commercial Property' }, { id: 'prp-shops', name: 'Shops & Offices' },
+      { id: 'prp-warehouses', name: 'Warehouses' }, { id: 'prp-industrial', name: 'Industrial Property' },
+      { id: 'prp-hostels', name: 'Hostels & PG' }, { id: 'prp-vacation', name: 'Vacation Rentals' },
+      { id: 'prp-services', name: 'Property Services' }, { id: 'prp-management', name: 'Property Management' },
     ],
   },
+
+  /* 4. HOME, FURNITURE & GARDEN ============================================ */
   {
     id: 'home',
     name: 'Home, Furniture & Garden',
-    attributes: [
-      CONDITION,
-      { key: 'material', label: 'Material', input: 'text' },
-      { key: 'assembly', label: 'Assembly required', input: 'boolean' },
-    ],
+    attributes: [CONDITION, { key: 'material', label: 'Material', input: 'text' }, { key: 'assembly', label: 'Assembly required', input: 'boolean' }],
     children: [
-      { id: 'hom-furniture', name: 'Furniture', children: [
-        { id: 'hom-sofa', name: 'Sofas' }, { id: 'hom-bed', name: 'Beds & Mattresses' },
-        { id: 'hom-dining', name: 'Dining Sets' }, { id: 'hom-wardrobe', name: 'Wardrobes' },
-        { id: 'hom-office-furn', name: 'Office Furniture' } ] },
-      { id: 'hom-decor', name: 'Home Decor' },
-      { id: 'hom-kitchenware', name: 'Kitchenware' },
-      { id: 'hom-garden', name: 'Garden & Outdoor' },
-      { id: 'hom-tools', name: 'Tools & DIY' },
-      { id: 'hom-building', name: 'Building Materials', children: [
-        { id: 'hom-bricks', name: 'Bricks' }, { id: 'hom-cement', name: 'Cement' },
-        { id: 'hom-sand', name: 'Sand & Aggregate' }, { id: 'hom-roofing', name: 'Roofing Sheets' },
-        { id: 'hom-timber', name: 'Timber' } ] },
+      { id: 'hom-sofas', name: 'Sofas' }, { id: 'hom-beds', name: 'Beds & Mattresses' },
+      { id: 'hom-tables', name: 'Tables & Chairs' }, { id: 'hom-wardrobes', name: 'Wardrobes' },
+      { id: 'hom-kitchen-furn', name: 'Kitchen Furniture' }, { id: 'hom-office-furn', name: 'Office Furniture' },
+      { id: 'hom-decor', name: 'Home Decor' }, { id: 'hom-lighting', name: 'Lighting' },
+      { id: 'hom-curtains', name: 'Curtains & Blinds' },
+      { id: 'hom-appliances', name: 'Appliances', children: [
+        { id: 'hom-fridge', name: 'Refrigerators' }, { id: 'hom-washing', name: 'Washing Machines' },
+        { id: 'hom-ac', name: 'Air Conditioners' }, { id: 'hom-coolers', name: 'Coolers' },
+        { id: 'hom-fans', name: 'Fans' }, { id: 'hom-microwave', name: 'Microwaves' },
+        { id: 'hom-oven', name: 'Ovens' }, { id: 'hom-mixer', name: 'Mixers & Grinders' },
+        { id: 'hom-coffee', name: 'Coffee Machines' }, { id: 'hom-purifier', name: 'Water Purifiers' },
+        { id: 'hom-vacuum', name: 'Vacuum Cleaners' }, { id: 'hom-geyser', name: 'Geysers' },
+        { id: 'hom-iron', name: 'Irons' }, { id: 'hom-small-app', name: 'Small Appliances' } ] },
+      { id: 'hom-garden', name: 'Gardening Equipment' }, { id: 'hom-plants', name: 'Plants' },
+      { id: 'hom-tools', name: 'Tools' }, { id: 'hom-improvement', name: 'Home Improvement Materials' },
+      { id: 'hom-cleaning', name: 'Cleaning Equipment' },
     ],
   },
+
+  /* 5. FASHION & PERSONAL ITEMS =========================================== */
   {
     id: 'fashion',
     name: 'Fashion & Personal Items',
     attributes: [
       CONDITION,
       { key: 'size', label: 'Size', input: 'text', filterable: true },
-      { key: 'gender', label: 'For', input: 'select', options: ['Men', 'Women', 'Unisex', 'Kids'], filterable: true },
+      { key: 'gender', label: 'For', input: 'select', options: ['Men', 'Women', 'Unisex', 'Kids', 'Boys', 'Girls'], filterable: true },
       { key: 'brand', label: 'Brand', input: 'text', filterable: true },
+      { key: 'material', label: 'Material', input: 'text', filterable: true },
     ],
     children: [
-      { id: 'fsh-clothing', name: 'Clothing', children: [
-        { id: 'fsh-mens', name: "Men's Clothing" }, { id: 'fsh-womens', name: "Women's Clothing" },
-        { id: 'fsh-kids', name: "Kids' Clothing" }, { id: 'fsh-suits', name: 'Suits & Formalwear' } ] },
-      { id: 'fsh-footwear', name: 'Footwear', children: [
-        { id: 'fsh-sneakers', name: 'Sneakers' }, { id: 'fsh-formal-shoes', name: 'Formal Shoes' } ] },
-      { id: 'fsh-watches', name: 'Watches' },
-      { id: 'fsh-jewellery', name: 'Jewellery' },
-      { id: 'fsh-bags', name: 'Bags & Luggage' },
-      { id: 'fsh-beauty', name: 'Beauty & Grooming' },
+      { id: 'fsh-mens', name: "Men's Clothing" }, { id: 'fsh-womens', name: "Women's Clothing" },
+      { id: 'fsh-kids', name: "Children's Clothing" }, { id: 'fsh-shoes', name: 'Shoes' },
+      { id: 'fsh-bags', name: 'Bags' }, { id: 'fsh-watches', name: 'Watches' },
+      { id: 'fsh-jewellery', name: 'Jewellery' }, { id: 'fsh-beauty', name: 'Beauty Products' },
+      { id: 'fsh-cosmetics', name: 'Cosmetics' }, { id: 'fsh-personal-care', name: 'Personal Care' },
+      { id: 'fsh-accessories', name: 'Accessories' }, { id: 'fsh-traditional', name: 'Traditional Clothing' },
+      { id: 'fsh-wedding', name: 'Wedding Clothing' }, { id: 'fsh-sportswear', name: 'Sportswear' },
+      { id: 'fsh-services', name: 'Fashion Services' },
     ],
   },
+
+  /* 6. JOBS & EMPLOYMENT =================================================== */
   {
     id: 'jobs',
     name: 'Jobs & Employment',
     attributes: [
       { key: 'employment_type', label: 'Employment type', input: 'select', required: true, filterable: true,
-        options: ['Full-time', 'Part-time', 'Casual', 'Temporary', 'Contract', 'Internship', 'Freelance'] },
-      { key: 'work_mode', label: 'Work mode', input: 'select', options: ['On-site', 'Remote', 'Hybrid', 'Work from home'], filterable: true },
-      { key: 'salary_type', label: 'Salary type', input: 'select', filterable: true,
+        options: ['Full-Time', 'Part-Time', 'Casual', 'Contract', 'Temporary', 'Internship', 'Freelance'] },
+      { key: 'work_mode', label: 'Work mode', input: 'select', filterable: true,
+        options: ['On-site', 'Remote', 'Hybrid', 'Work from home'] },
+      { key: 'salary_type', label: 'Payment frequency', input: 'select', filterable: true,
         options: ['Monthly', 'Daily wage', 'Hourly', 'Commission', 'Per project', 'Negotiable'] },
       { key: 'salary_min', label: 'Minimum salary', input: 'number', unit: '₹', filterable: true },
       { key: 'salary_max', label: 'Maximum salary', input: 'number', unit: '₹', filterable: true },
@@ -258,25 +214,29 @@ export const TAXONOMY: MainCategory[] = [
       { key: 'education', label: 'Education required', input: 'select',
         options: ['None', '10th', '12th', 'Diploma', 'Graduate', 'Post-graduate', 'Doctorate'] },
       { key: 'working_hours', label: 'Working hours', input: 'text' },
+      { key: 'company', label: 'Company name', input: 'text', filterable: true },
       { key: 'vacancies', label: 'Number of vacancies', input: 'number' },
       { key: 'application_method', label: 'How to apply', input: 'select', options: ['In-app message', 'Phone call', 'Email', 'Walk-in'] },
       { key: 'closing_date', label: 'Closing date', input: 'text' },
+      { key: 'benefits', label: 'Benefits', input: 'text' },
     ],
     children: [
-      { id: 'job-it', name: 'IT & Software' }, { id: 'job-engineering', name: 'Engineering' },
-      { id: 'job-construction', name: 'Construction' }, { id: 'job-admin', name: 'Administration' },
-      { id: 'job-sales', name: 'Sales & Marketing' }, { id: 'job-retail', name: 'Retail' },
-      { id: 'job-customer', name: 'Customer Service' }, { id: 'job-bpo', name: 'BPO & Call Centre' },
-      { id: 'job-teaching', name: 'Teaching' }, { id: 'job-healthcare', name: 'Healthcare' },
-      { id: 'job-hospitality', name: 'Hospitality' }, { id: 'job-hotel', name: 'Hotel & Tourism' },
-      { id: 'job-driving', name: 'Driving & Delivery' }, { id: 'job-security', name: 'Security' },
-      { id: 'job-accounting', name: 'Accounting' }, { id: 'job-legal', name: 'Legal' },
-      { id: 'job-agriculture', name: 'Agriculture' }, { id: 'job-manufacturing', name: 'Manufacturing' },
-      { id: 'job-domestic', name: 'Domestic Help' }, { id: 'job-beauty', name: 'Beauty & Salon' },
-      { id: 'job-media', name: 'Media & Creative' }, { id: 'job-government', name: 'Government' },
-      { id: 'job-ngo', name: 'NGO & Charity' }, { id: 'job-sports', name: 'Sports & Fitness' },
+      { id: 'job-full-time', name: 'Full-Time Jobs' }, { id: 'job-part-time', name: 'Part-Time Jobs' },
+      { id: 'job-casual', name: 'Casual Jobs' }, { id: 'job-contract', name: 'Contract Jobs' },
+      { id: 'job-temporary', name: 'Temporary Jobs' }, { id: 'job-work-home', name: 'Work From Home' },
+      { id: 'job-remote', name: 'Remote Jobs' }, { id: 'job-internship', name: 'Internships' },
+      { id: 'job-freelance', name: 'Freelance Work' }, { id: 'job-commission', name: 'Commission-Based Work' },
+      { id: 'job-delivery', name: 'Delivery Jobs' }, { id: 'job-driver', name: 'Driver Jobs' },
+      { id: 'job-sales', name: 'Sales Jobs' }, { id: 'job-marketing', name: 'Marketing Jobs' },
+      { id: 'job-office', name: 'Office Jobs' }, { id: 'job-customer-svc', name: 'Customer Service' },
+      { id: 'job-it', name: 'IT & Software Jobs' }, { id: 'job-construction', name: 'Construction Jobs' },
+      { id: 'job-hospitality', name: 'Hospitality Jobs' }, { id: 'job-healthcare', name: 'Healthcare Jobs' },
+      { id: 'job-education', name: 'Education Jobs' }, { id: 'job-domestic', name: 'Domestic Help' },
+      { id: 'job-security', name: 'Security Jobs' }, { id: 'job-skilled', name: 'Skilled Trades' },
     ],
   },
+
+  /* 7. SERVICES ============================================================ */
   {
     id: 'services',
     name: 'Services',
@@ -285,73 +245,169 @@ export const TAXONOMY: MainCategory[] = [
       { key: 'service_area', label: 'Service area', input: 'text', filterable: true },
       { key: 'availability', label: 'Availability', input: 'select', options: ['Weekdays', 'Weekends', 'All week', '24x7', 'By appointment'], filterable: true },
       { key: 'pricing_method', label: 'Pricing method', input: 'select', options: ['Fixed', 'Hourly', 'Per visit', 'Per project', 'Quote on request'], filterable: true },
+      { key: 'experience_years', label: 'Years of experience', input: 'number', filterable: true },
     ],
     children: [
       { id: 'srv-home', name: 'Home Services', children: [
-        { id: 'srv-electrician', name: 'Electricians' }, { id: 'srv-plumber', name: 'Plumbers' },
-        { id: 'srv-carpenter', name: 'Carpenters' }, { id: 'srv-painter', name: 'Painters' },
-        { id: 'srv-cleaning', name: 'Cleaning' }, { id: 'srv-pest', name: 'Pest Control' } ] },
-      { id: 'srv-construction', name: 'Construction & Repair', children: [
-        { id: 'srv-roofing', name: 'Roofing Contractors' }, { id: 'srv-masonry', name: 'Masonry' } ] },
-      { id: 'srv-transport', name: 'Transport & Movers' },
-      { id: 'srv-education', name: 'Tutors & Education' },
-      { id: 'srv-events', name: 'Events & Photography' },
-      { id: 'srv-professional', name: 'Legal, Finance & Professional' },
-      { id: 'srv-tailor', name: 'Tailors & Alterations' },
+        { id: 'srv-cleaning', name: 'Cleaning' }, { id: 'srv-plumbing', name: 'Plumbing' },
+        { id: 'srv-electrical', name: 'Electrical' }, { id: 'srv-painting', name: 'Painting' },
+        { id: 'srv-carpentry', name: 'Carpentry' }, { id: 'srv-construction', name: 'Construction' },
+        { id: 'srv-moving', name: 'Moving & Transport' } ] },
+      { id: 'srv-repair', name: 'Repair Services' },
+      { id: 'srv-computer', name: 'Computer Services' },
+      { id: 'srv-phone-repair', name: 'Phone Repair' },
+      { id: 'srv-vehicle', name: 'Vehicle Services' },
+      { id: 'srv-photography', name: 'Photography' },
+      { id: 'srv-video', name: 'Video Production' },
+      { id: 'srv-design', name: 'Design Services' },
+      { id: 'srv-marketing', name: 'Marketing Services' },
+      { id: 'srv-legal', name: 'Legal Services' },
+      { id: 'srv-accounting', name: 'Accounting Services' },
+      { id: 'srv-education', name: 'Education & Tutoring' },
+      { id: 'srv-childcare', name: 'Childcare' },
+      { id: 'srv-beauty', name: 'Beauty Services' },
+      { id: 'srv-fitness', name: 'Fitness & Personal Training' },
+      { id: 'srv-events', name: 'Event Services' },
+      { id: 'srv-catering', name: 'Catering' },
+      { id: 'srv-travel', name: 'Travel Services' },
+      { id: 'srv-business', name: 'Business Services' },
     ],
   },
+
+  /* 8. BUSINESS & INDUSTRIAL =============================================== */
   {
     id: 'business',
     name: 'Business & Industrial',
-    attributes: [
-      CONDITION,
-      { key: 'capacity', label: 'Capacity / output', input: 'text' },
-      { key: 'power', label: 'Power requirement', input: 'text' },
-    ],
+    attributes: [CONDITION, { key: 'capacity', label: 'Capacity / output', input: 'text' }, { key: 'power_req', label: 'Power requirement', input: 'text' }],
     children: [
-      { id: 'biz-forsale', name: 'Businesses for Sale' },
-      { id: 'biz-machinery', name: 'Industrial Machinery' },
-      { id: 'biz-fixtures', name: 'Store Fixtures' },
-      { id: 'biz-restaurant', name: 'Restaurant Supplies' },
-      { id: 'biz-office', name: 'Office Equipment' },
-      { id: 'biz-wholesale', name: 'Wholesale & Bulk' },
+      { id: 'biz-machinery', name: 'Industrial Machinery' }, { id: 'biz-manufacturing', name: 'Manufacturing Equipment' },
+      { id: 'biz-construction-eq', name: 'Construction Equipment' }, { id: 'biz-agri-eq', name: 'Agricultural Equipment' },
+      { id: 'biz-restaurant', name: 'Restaurant Equipment' }, { id: 'biz-shop-eq', name: 'Shop Equipment' },
+      { id: 'biz-office-eq', name: 'Office Equipment' }, { id: 'biz-medical-eq', name: 'Medical Equipment' },
+      { id: 'biz-safety', name: 'Safety Equipment' }, { id: 'biz-packaging', name: 'Packaging Equipment' },
+      { id: 'biz-wholesale', name: 'Wholesale Products' }, { id: 'biz-opportunities', name: 'Business Opportunities' },
+      { id: 'biz-franchise', name: 'Franchise Opportunities' }, { id: 'biz-commercial-supplies', name: 'Commercial Supplies' },
+      { id: 'biz-raw-materials', name: 'Raw Materials' }, { id: 'biz-import-export', name: 'Import & Export Services' },
     ],
   },
+
+  /* 9. HOME APPLIANCES ===================================================== */
+  {
+    id: 'appliances',
+    name: 'Home Appliances',
+    attributes: [CONDITION, { key: 'brand', label: 'Brand', input: 'text', filterable: true }, { key: 'capacity', label: 'Capacity', input: 'text', filterable: true }, { key: 'energy_rating', label: 'Energy rating', input: 'select', options: ['5 Star', '4 Star', '3 Star', '2 Star', '1 Star'], filterable: true }],
+    children: [
+      { id: 'app-fridge', name: 'Refrigerators' }, { id: 'app-freezer', name: 'Freezers' },
+      { id: 'app-washing', name: 'Washing Machines' }, { id: 'app-dryer', name: 'Dryers' },
+      { id: 'app-dishwasher', name: 'Dishwashers' }, { id: 'app-microwave', name: 'Microwaves' },
+      { id: 'app-oven', name: 'Ovens' }, { id: 'app-mixer', name: 'Mixers & Grinders' },
+      { id: 'app-coffee', name: 'Coffee Machines' }, { id: 'app-ac', name: 'Air Conditioners' },
+      { id: 'app-purifier', name: 'Air Purifiers' }, { id: 'app-water-purifier', name: 'Water Purifiers' },
+      { id: 'app-vacuum', name: 'Vacuum Cleaners' }, { id: 'app-fan', name: 'Fans' },
+      { id: 'app-geyser', name: 'Geysers' }, { id: 'app-iron', name: 'Irons' },
+      { id: 'app-small', name: 'Small Appliances' },
+    ],
+  },
+
+  /* 10. BOOKS, SPORTS, HOBBIES & ENTERTAINMENT ============================ */
   {
     id: 'leisure',
     name: 'Books, Sports, Hobbies & Entertainment',
-    attributes: [CONDITION, { key: 'brand', label: 'Brand', input: 'text', filterable: true }],
+    attributes: [CONDITION, { key: 'genre', label: 'Genre / type', input: 'text', filterable: true }, { key: 'author_artist', label: 'Author / artist', input: 'text', filterable: true }],
     children: [
-      { id: 'lei-books', name: 'Books & Magazines' },
-      { id: 'lei-sports', name: 'Sports Equipment' },
-      { id: 'lei-fitness', name: 'Gym & Fitness' },
-      { id: 'lei-music', name: 'Musical Instruments' },
-      { id: 'lei-games', name: 'Games & Toys' },
-      { id: 'lei-collectibles', name: 'Art & Collectibles' },
-      { id: 'lei-travel', name: 'Travel & Outdoor Gear' },
+      { id: 'lei-books', name: 'Books' }, { id: 'lei-school-books', name: 'School Books' },
+      { id: 'lei-college-books', name: 'College Books' }, { id: 'lei-instruments', name: 'Musical Instruments' },
+      { id: 'lei-sports-eq', name: 'Sports Equipment' }, { id: 'lei-gym', name: 'Gym Equipment' },
+      { id: 'lei-outdoor', name: 'Outdoor Activities' }, { id: 'lei-toys', name: 'Toys' },
+      { id: 'lei-games', name: 'Games' }, { id: 'lei-collectibles', name: 'Collectibles' },
+      { id: 'lei-art', name: 'Art & Crafts' }, { id: 'lei-movies', name: 'Movies & Music' },
+      { id: 'lei-party', name: 'Party Supplies' }, { id: 'lei-hobby', name: 'Hobby Equipment' },
+      { id: 'lei-tickets', name: 'Tickets & Events' },
     ],
   },
+
+  /* 11. PETS, ANIMALS & AGRICULTURE ======================================= */
   {
     id: 'agri',
     name: 'Pets, Animals & Agriculture',
     attributes: [
+      { key: 'breed_type', label: 'Breed / type', input: 'text', filterable: true },
+      { key: 'age', label: 'Age', input: 'text', filterable: true },
+      { key: 'vaccinated', label: 'Vaccinated', input: 'boolean', filterable: true },
       { key: 'quantity', label: 'Quantity', input: 'number', filterable: true },
       { key: 'organic', label: 'Organic', input: 'boolean', filterable: true },
     ],
     children: [
-      { id: 'agr-pets', name: 'Pets' },
-      { id: 'agr-petsupplies', name: 'Pet Supplies' },
-      { id: 'agr-livestock', name: 'Livestock' },
-      { id: 'agr-produce', name: 'Farm Produce' },
-      { id: 'agr-seeds', name: 'Seeds & Plants' },
-      { id: 'agr-equipment', name: 'Farm Equipment' },
-      { id: 'agr-organic', name: 'Organic Foods' },
+      { id: 'agr-dogs', name: 'Dogs' }, { id: 'agr-cats', name: 'Cats' },
+      { id: 'agr-birds', name: 'Birds' }, { id: 'agr-fish', name: 'Fish' },
+      { id: 'agr-pet-acc', name: 'Pet Accessories' }, { id: 'agr-pet-food', name: 'Pet Food' },
+      { id: 'agr-livestock', name: 'Livestock' }, { id: 'agr-poultry', name: 'Poultry' },
+      { id: 'agr-cattle', name: 'Cattle' }, { id: 'agr-farm-eq', name: 'Farm Equipment' },
+      { id: 'agr-seeds', name: 'Seeds' }, { id: 'agr-plants', name: 'Plants' },
+      { id: 'agr-fertiliser', name: 'Fertiliser' }, { id: 'agr-animal-feed', name: 'Animal Feed' },
+      { id: 'agr-agri-products', name: 'Agricultural Products' }, { id: 'agr-farm-services', name: 'Farm Services' },
+    ],
+  },
+
+  /* 12. EDUCATION & TRAINING =============================================== */
+  {
+    id: 'education',
+    name: 'Education & Training',
+    attributes: [
+      { key: 'course_type', label: 'Course type', input: 'select', filterable: true, options: ['Online', 'Offline', 'Hybrid'] },
+      { key: 'subject', label: 'Subject', input: 'text', filterable: true },
+      { key: 'level', label: 'Level', input: 'select', options: ['Beginner', 'Intermediate', 'Advanced', 'Professional'], filterable: true },
+      { key: 'duration', label: 'Duration', input: 'text', filterable: true },
+      { key: 'certification', label: 'Certification provided', input: 'boolean', filterable: true },
+      { key: 'fees', label: 'Fees', input: 'number', unit: '₹', filterable: true },
+    ],
+    children: [
+      { id: 'edu-schools', name: 'Schools' }, { id: 'edu-colleges', name: 'Colleges' },
+      { id: 'edu-coaching', name: 'Coaching' }, { id: 'edu-online', name: 'Online Courses' },
+      { id: 'edu-language', name: 'Language Classes' }, { id: 'edu-computer-training', name: 'Computer Training' },
+      { id: 'edu-certification', name: 'Professional Certifications' }, { id: 'edu-music', name: 'Music Classes' },
+      { id: 'edu-dance', name: 'Dance Classes' }, { id: 'edu-driving', name: 'Driving Classes' },
+      { id: 'edu-vocational', name: 'Vocational Training' }, { id: 'edu-exam-prep', name: 'Exam Preparation' },
+      { id: 'edu-tutors', name: 'Tutors' },
+    ],
+  },
+
+  /* 13. TRAVEL, LEISURE & EVENTS ========================================== */
+  {
+    id: 'travel',
+    name: 'Travel, Leisure & Events',
+    attributes: [
+      { key: 'travel_type', label: 'Type', input: 'select', options: ['Hotel', 'Rental', 'Package', 'Ticket', 'Service'], filterable: true },
+      { key: 'location', label: 'Location', input: 'text', filterable: true },
+      { key: 'duration', label: 'Duration', input: 'text', filterable: true },
+      { key: 'price_per_night', label: 'Price per night', input: 'number', unit: '₹', filterable: true },
+      { key: 'amenities', label: 'Amenities', input: 'text' },
+    ],
+    children: [
+      { id: 'trv-hotels', name: 'Hotels' }, { id: 'trv-rentals', name: 'Holiday Rentals' },
+      { id: 'trv-packages', name: 'Travel Packages' }, { id: 'trv-flights', name: 'Flights' },
+      { id: 'trv-bus', name: 'Bus Tickets' }, { id: 'trv-event-tickets', name: 'Event Tickets' },
+      { id: 'trv-wedding', name: 'Wedding Services' }, { id: 'trv-party', name: 'Party Services' },
+      { id: 'trv-guides', name: 'Tour Guides' }, { id: 'trv-equipment', name: 'Travel Equipment' },
+    ],
+  },
+
+  /* 14. COMMUNITY & MISCELLANEOUS ========================================= */
+  {
+    id: 'community',
+    name: 'Community & Miscellaneous',
+    attributes: [{ key: 'post_type', label: 'Post type', input: 'select', options: ['Lost', 'Found', 'Free', 'Donation', 'Announcement', 'Group', 'Other'], filterable: true }],
+    children: [
+      { id: 'com-lost-found', name: 'Lost & Found' }, { id: 'com-free', name: 'Free Items' },
+      { id: 'com-donations', name: 'Donations' }, { id: 'com-announcements', name: 'Announcements' },
+      { id: 'com-groups', name: 'Local Groups' }, { id: 'com-community-svc', name: 'Community Services' },
+      { id: 'com-other', name: 'Other' },
     ],
   },
 ];
 
 /* ========================================================================== */
-/* Lookups                                                                     */
+/* Lookup helpers                                                              */
 /* ========================================================================== */
 export const TAX_MAP: Record<string, MainCategory> = Object.fromEntries(
   TAXONOMY.map((category) => [category.id, category]),
@@ -379,7 +435,6 @@ export function nodeName(categoryId: string, subcategoryId?: string, typeId?: st
   return sub.children?.find((item) => item.id === typeId)?.name ?? sub.name;
 }
 
-/** Breadcrumb for search results and listing pages. */
 export function breadcrumb(categoryId: string, subcategoryId?: string, typeId?: string): string[] {
   const out: string[] = [];
   const category = TAX_MAP[categoryId];
@@ -394,7 +449,8 @@ export function breadcrumb(categoryId: string, subcategoryId?: string, typeId?: 
   return out;
 }
 
-/** Every filterable attribute across the taxonomy, for the search UI. */
 export function filterableAttributes(categoryId: string): AttrDef[] {
   return attributesOf(categoryId).filter((attr) => attr.filterable !== false);
 }
+
+export const TAXONOMY_VERSION = '14.0';
