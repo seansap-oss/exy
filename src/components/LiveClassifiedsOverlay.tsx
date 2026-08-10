@@ -78,6 +78,7 @@ export function LiveClassifiedsOverlay({
 }: Props) {
   const [muted, setMuted] = useState(true);
   const [minimized, setMinimized] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const [comments, setComments] = useState<LiveComment[]>([]);
   const [draft, setDraft] = useState('');
   const [viewers, setViewers] = useState(() => Math.max(8, Math.round(listing.todayViews * 0.7) + 6));
@@ -190,12 +191,16 @@ export function LiveClassifiedsOverlay({
           {/* 4.1 + 4.4 — mute and minimise sit together, bottom right */}
           <div className="lco__controls">
             <button
-              className={`lco__ctl${muted ? '' : ' is-live'}`}
-              onClick={() => setMuted((prev) => !prev)}
+              className={`lco__mute${muted ? '' : ' is-live'}`}
+              onClick={(event) => {
+                event.stopPropagation();
+                setMuted((prev) => !prev);
+              }}
               aria-label={muted ? 'Unmute' : 'Mute'}
               title={muted ? 'Unmute' : 'Mute'}
             >
-              {muted ? <IconMuted size={19} /> : <IconUnmuted size={19} />}
+              {muted ? <IconMuted size={22} /> : <IconUnmuted size={22} />}
+              <span>{muted ? 'Tap for sound' : 'Sound on'}</span>
             </button>
             <button
               className={`lco__ctl${minimized ? ' is-live' : ''}`}
@@ -345,8 +350,38 @@ export function LiveClassifiedsOverlay({
         )}
       </div>
 
-      <button className="lco__close" onClick={onClose} aria-label="Close player">
-        <IconClose size={22} />
+      <button
+        className="lco__close"
+        onClick={(event) => {
+          // Stop propagation so the backdrop below does not also fire.
+          event.stopPropagation();
+          // Exit fullscreen first, then close the overlay.
+          if (isFullscreen && document.fullscreenElement) {
+            document.exitFullscreen?.().catch(() => undefined);
+          }
+          onClose();
+        }}
+        aria-label="Close video"
+        title="Close video"
+      >
+        <IconClose size={24} />
+      </button>
+      <button
+        className="lco__fs"
+        onClick={(event) => {
+          event.stopPropagation();
+          if (!isFullscreen) {
+            document.documentElement.requestFullscreen?.().catch(() => undefined);
+            setIsFullscreen(true);
+          } else {
+            document.exitFullscreen?.().catch(() => undefined);
+            setIsFullscreen(false);
+          }
+        }}
+        aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
+        title={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
+      >
+        {isFullscreen ? '⤡' : '⤢'}
       </button>
     </div>
   );

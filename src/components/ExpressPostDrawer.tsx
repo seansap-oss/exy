@@ -6,7 +6,6 @@ import { HistorySuggest } from './HistorySuggest';
 import { saveListing } from '../lib/publish';
 import { TAXONOMY, subcategoriesOf } from '../data/taxonomy';
 import { parseVideoUrl, providerLabel } from '../lib/embeds';
-import { TIER_LIMITS } from '../lib/payments';
 import { uid } from '../lib/storage';
 import { IconCheck, IconClose, IconSpark, IconVideo } from './Icons';
 
@@ -85,7 +84,6 @@ export function ExpressPostDrawer({ payload, profile, onClose, onPublish, onNeed
     if (title.trim().length < 6) return setError('Give the listing a title of at least 6 characters.');
     if (!categoryId) return setError('Pick a category.');
 
-    const limits = TIER_LIMITS[profile.tier];
     const listing: Listing = {
       id: uid('lst'),
       title: title.trim(),
@@ -100,7 +98,10 @@ export function ExpressPostDrawer({ payload, profile, onClose, onPublish, onNeed
       region: 'india',
       city: city.trim() || profile.location.split(',')[0],
       sellerId: profile.id,
-      video: limits.videos > 0 ? video : undefined,
+      // Provider metadata (provider, url, externalId) must always be stored so
+      // the listing renders correctly even on free tiers, where video *playback*
+      // is suppressed. providerColumns() reads these for the text columns.
+      video,
       photos: ['linear-gradient(135deg,#FFB300,#FF9500)'],
       tier: profile.tier,
       featured: profile.tier === 'comprehensive' || profile.tier === 'dealer',

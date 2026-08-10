@@ -5384,3 +5384,87 @@ select.bulk-input {
 .fs-player__open:hover {
   transform: scale(1.03);
 }
+
+/* Mute control - larger touch target with label */
+.lco__mute {
+  position: fixed;
+  right: 14px;
+  bottom: 92px;
+  z-index: 70;
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  padding: 12px 18px;
+  border-radius: var(--r-pill);
+  background: rgba(12, 11, 9, 0.82);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  min-width: 48px;
+  min-height: 48px;
+  transition: transform 0.16s var(--ease), background 0.18s var(--ease);
+}
+
+.lco__mute:hover {
+  transform: scale(1.05);
+}
+
+.lco__mute.is-live {
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  color: var(--accent-ink);
+  border-color: transparent;
+}
+
+/* Fullscreen button - top left beside close */
+.lco__fs {
+  position: fixed;
+  top: 20px;
+  right: 74px;
+  z-index: 70;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(10px);
+  color: #fff;
+  font-size: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.lco__fs:hover {
+  background: rgba(255, 255, 255, 0.24);
+}
+
+.lco__close {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 70;
+  width: 48px;
+  height: 48px;
+}
+
+@media (max-width: 760px) {
+  .lco__mute {
+    bottom: calc(var(--nav-h) + env(safe-area-inset-bottom, 0px) + 14px);
+    padding: 10px 15px;
+    font-size: 12px;
+    min-height: 44px;
+  }
+  .lco__fs {
+    top: 14px;
+    right: 68px;
+    width: 44px;
+    height: 44px;
+  }
+  .lco__close {
+    top: 14px;
+    right: 14px;
+    width: 44px;
+    height: 44px;
+  }
+}

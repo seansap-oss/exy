@@ -2479,8 +2479,15 @@ function ProfileView({
 
             <div className="panel">
               <div className="panel__title">Session</div>
-              <button className="btn btn--danger" onClick={onSignOut}>
-                Sign out
+              <div className="clone-preview" style={{ wordBreak: 'break-all', maxHeight: 120, fontSize: 11.5 }}>
+                Supabase: {isSupabaseLive ? 'connected' : 'not configured'}<br />
+                Project: {isSupabaseLive ? new URL(import.meta.env.VITE_SUPABASE_URL as string).host : '—'}<br />
+                Signed in: {profile ? 'yes' : 'no'}<br />
+                Role: {profile?.role ?? '—'}<br />
+                v1.4.0
+              </div>
+              <button className="btn btn--danger" onClick={onSignOut} style={{ marginTop: 12 }}>
+                Log out
               </button>
             </div>
           </>
@@ -2570,7 +2577,7 @@ function Footer({
         </div>
 
         <div className="footer__bottom">
-          <span>© {new Date().getFullYear()} EXY Classifieds. Built for India.</span>
+          <span>© {new Date().getFullYear()} EXY Classifieds. Built for India. v1.4.0</span>
           <span>Instagram · YouTube Shorts · Facebook Reels · TikTok indexing</span>
         </div>
       </div>
