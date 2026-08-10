@@ -16,10 +16,10 @@
 -- FIX:
 --   grant_admin() now sets a session-level GUC, app.bypass_role_guard, to
 --   'true' before the UPDATE. The trigger checks this variable and skips
---   the privilege guard when it is set. The variable is reset in a
---   finally-style cleanup so it can never be left on. Because the GUC is
---   session-scoped, it cannot be set or exploited by any concurrent
---   connection, and it is never controllable through the PostgREST API.
+--   the privilege guard when it is set. The variable is reset afterward so
+--   it can never be left on. Because the GUC is session-scoped, it cannot be
+--   set or exploited by any concurrent connection, and it is never
+--   controllable through the PostgREST API.
 --
 --   Additionally, grant_admin() now re-reads the row and returns the
 --   actual stored role, so it can never claim success unless the database
@@ -37,9 +37,6 @@ declare
   caller_is_admin boolean;
   bypass_active   boolean;
 begin
-  -- Allow an operator-driven admin grant to pass through. The GUC is
-  -- session-scoped and only ever set inside grant_admin(), so it cannot be
-  -- toggled by an HTTP client or a concurrent transaction.
   begin
     bypass_active := current_setting('app.bypass_role_guard', true)::boolean;
   exception when undefined_object then
@@ -72,7 +69,6 @@ declare
   target_id uuid;
   new_role  text;
 begin
-  -- Enable the bypass so the privilege guard does not revert our UPDATE.
   perform set_config('app.bypass_role_guard', 'true', true);
 
   select id into target_id from public.profiles where lower(email) = lower(target_email);
@@ -82,12 +78,10 @@ begin
     return format('No profile found for %s — sign up first, then re-run.', target_email);
   end if;
 
-  update public.profiles set role = 'admin', updated_at = now() where id = target_id;
+  update public.profiles set role = 'admin' where id = target_id;
 
-  -- Report the ACTUAL stored role, not an assumption.
   select role into new_role from public.profiles where id = target_id;
 
-  -- Always reset the bypass, even if the UPDATE above failed.
   perform set_config('app.bypass_role_guard', 'false', true);
 
   if new_role = 'admin' then
@@ -112,7 +106,7 @@ begin
     return format('No profile found for %s.', target_email);
   end if;
 
-  update public.profiles set role = 'user', updated_at = now() where id = target_id;
+  update public.profiles set role = 'user' where id = target_id;
 
   select role into new_role from public.profiles where id = target_id;
 
@@ -125,7 +119,6 @@ begin
   end if;
 end $$;
 
--- Keep these functions out of reach of the PostgREST API.
 revoke all on function public.grant_admin(text)  from public, anon, authenticated;
 revoke all on function public.revoke_admin(text) from public, anon, authenticated;
 grant execute on function public.grant_admin(text)  to service_role;
