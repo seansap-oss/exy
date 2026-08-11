@@ -89,7 +89,7 @@ export function VideoEmbed({ video, fallback, orientation = 'vertical', autoStar
             <video src={video.embedSrc} poster={video.poster} controls autoPlay playsInline className="video__native" />
           ) : video.provider === 'youtube' ? (
             <iframe
-              src={`${video.embedSrc}&autoplay=1`}
+              src={`${video.embedSrc}${video.embedSrc.includes('?') ? '&' : '?'}autoplay=1&mute=1&controls=1&playsinline=1&rel=0`}
               title={title ?? providerLabel(video.provider)}
               allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
               allowFullScreen

@@ -12,11 +12,9 @@ import {
   IconChevron,
   IconClose,
   IconHeart,
-  IconMuted,
   IconPin,
   IconPlay,
   IconShield,
-  IconUnmuted,
   IconVideo,
 } from './Icons';
 
@@ -40,7 +38,7 @@ interface Props {
 /**
  * Module 6.2 — cascading card stack.
  * Horizontal snap carousel of 9:16 video cards.
- * Native video autoplays muted; the mute toggle (bottom-right) enables audio.
+ * Native/provider players own their playback and audio controls.
  * A second interaction opens the immersive 9:16 fullscreen player.
  */
 export function VisualFeed({
@@ -60,7 +58,6 @@ export function VisualFeed({
   const initial = Math.max(0, startId ? deck.findIndex((listing) => listing.id === startId) : 0);
 
   const [index, setIndex] = useState(initial);
-  const [muted, setMuted] = useState(true);
   const [started, setStarted] = useState(false);
 
   const dwellRef = useRef<{ id: string; at: number } | null>(null);
@@ -144,7 +141,6 @@ export function VisualFeed({
     const onKey = (event: KeyboardEvent) => {
       if (event.key === 'ArrowRight') step(1);
       if (event.key === 'ArrowLeft') step(-1);
-      if (event.key === 'm') setMuted((prev) => !prev);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -175,7 +171,6 @@ export function VisualFeed({
               <FeedCard
                 listing={listing}
                 seller={sellerMap[listing.sellerId]}
-                muted={muted}
                 started={started && position === index}
                 active={position === index}
                 saved={saved.includes(listing.id)}
@@ -212,18 +207,6 @@ export function VisualFeed({
         </div>
       </div>
 
-      {/* Mute / unmute — bottom right. Tapping this (not swiping) enables audio. */}
-      <button
-        className={`feed__mute${muted ? '' : ' is-live'}`}
-        onClick={() => {
-          setMuted((prev) => !prev);
-          setStarted(true);
-        }}
-        aria-label={muted ? 'Unmute audio' : 'Mute audio'}
-      >
-        {muted ? <IconMuted size={20} /> : <IconUnmuted size={20} />}
-        <span>{muted ? 'Tap for sound' : 'Sound on'}</span>
-      </button>
     </div>
   );
 }
@@ -234,7 +217,6 @@ export function VisualFeed({
 function FeedCard({
   listing,
   seller,
-  muted,
   started,
   active,
   saved,
@@ -247,7 +229,6 @@ function FeedCard({
 }: {
   listing: Listing;
   seller?: Seller;
-  muted: boolean;
   /** Centred slide drives playback. */
   active: boolean;
   started: boolean;
@@ -267,10 +248,10 @@ function FeedCard({
   useEffect(() => {
     const element = videoRef.current;
     if (!element) return;
-    element.muted = muted;
+    element.muted = true;
     if (isTop) void element.play().catch(() => undefined);
     else element.pause();
-  }, [muted, isTop]);
+  }, [isTop]);
 
   return (
     <article className={`feed-card${isTop ? ' is-top' : ''}`}>
@@ -280,15 +261,16 @@ function FeedCard({
             ref={videoRef}
             src={nativeVideo.src}
             poster={nativeVideo.poster}
-            muted={muted}
+            muted
             loop
             playsInline
             autoPlay={isTop}
+            controls
             className="feed-card__video"
           />
         ) : started && playback.kind === 'inline' && playback.src ? (
           <iframe
-            src={`${playback.src}&autoplay=1&mute=${muted ? 1 : 0}`}
+            src={`${playback.src}${playback.src.includes('?') ? '&' : '?'}autoplay=1&mute=1&controls=1&playsinline=1&rel=0`}
             title={listing.title}
             allow={providerAllow(listing.video?.provider ?? 'youtube')}
             allowFullScreen
@@ -402,7 +384,6 @@ function FeedCard({
 /* Immersive 9:16 fullscreen player                                            */
 /* ========================================================================== */
 export function FullscreenPlayer({ listing, onClose }: { listing: Listing; onClose: () => void }) {
-  const [muted, setMuted] = useState(false);
   const nativeVideo = listing.media?.find((item) => item.kind === 'video');
   const playback = resolvePlayback(listing);
 
@@ -419,10 +400,10 @@ export function FullscreenPlayer({ listing, onClose }: { listing: Listing; onClo
       <button className="fs-player__scrim" onClick={onClose} aria-label="Close player" />
       <div className="fs-player__frame">
         {nativeVideo ? (
-          <video src={nativeVideo.src} poster={nativeVideo.poster} muted={muted} autoPlay loop playsInline controls />
+            <video src={nativeVideo.src} poster={nativeVideo.poster} muted autoPlay loop playsInline controls />
         ) : playback.kind === 'inline' && playback.src ? (
           <iframe
-            src={`${playback.src}&autoplay=1&mute=${muted ? 1 : 0}`}
+            src={`${playback.src}${playback.src.includes('?') ? '&' : '?'}autoplay=1&mute=1&controls=1&playsinline=1&rel=0`}
             title={listing.title}
             allow={providerAllow(listing.video?.provider ?? 'youtube')}
             allowFullScreen
@@ -451,9 +432,6 @@ export function FullscreenPlayer({ listing, onClose }: { listing: Listing; onClo
               {inr(listing.price)} · {listing.city}
             </span>
           </div>
-          <button className="feed__mute" style={{ position: 'static' }} onClick={() => setMuted((prev) => !prev)}>
-            {muted ? <IconMuted size={18} /> : <IconUnmuted size={18} />}
-          </button>
         </div>
       </div>
       <button className="fs-player__close" onClick={onClose} aria-label="Close">

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent } from 'react';
 import type {
   AdEvent,
   Category,
@@ -40,6 +40,7 @@ import {
   writeThreads,
 } from './lib/messaging';
 import { isSupabaseLive } from './lib/supabase';
+import { providerLabel } from './lib/embeds';
 import { useAndroidBack } from './hooks/useAndroidBack';
 import {
   dedupeListings,
@@ -140,6 +141,10 @@ export default function Prototype() {
   const [toasts, setToasts] = useState<ToastMsg[]>([]);
   const [pendingAction, setPendingAction] = useState<'sell' | 'save' | 'message' | null>(null);
   const [pendingTarget, setPendingTarget] = useState<string | null>(null);
+  const [adminGateOpen, setAdminGateOpen] = useState(false);
+  const [adminGatePassword, setAdminGatePassword] = useState('');
+  const [localAdminUnlocked, setLocalAdminUnlocked] = useState(false);
+  const adminPressTimer = useRef<number | null>(null);
 
   /* --------------------------------- effects --------------------------------- */
   useEffect(() => {
@@ -160,6 +165,41 @@ export default function Prototype() {
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, [route]);
+
+  useEffect(() => () => {
+    if (adminPressTimer.current !== null) window.clearTimeout(adminPressTimer.current);
+  }, []);
+
+  const startAdminPress = () => {
+    if (adminPressTimer.current !== null) window.clearTimeout(adminPressTimer.current);
+    adminPressTimer.current = window.setTimeout(() => {
+      setAdminGatePassword('');
+      setAdminGateOpen(true);
+    }, 3000);
+  };
+
+  const cancelAdminPress = () => {
+    if (adminPressTimer.current !== null) {
+      window.clearTimeout(adminPressTimer.current);
+      adminPressTimer.current = null;
+    }
+  };
+
+  const submitAdminGate = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (adminGatePassword !== 'admin@123') {
+      toast('Incorrect admin password.', 'err');
+      return;
+    }
+    if (!isAdmin && !import.meta.env.DEV) {
+      toast('Live admin access requires a Supabase admin account.', 'err');
+      return;
+    }
+    setLocalAdminUnlocked(true);
+    setAdminGateOpen(false);
+    setAdminGatePassword('');
+    go({ name: 'admin' });
+  };
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -261,11 +301,6 @@ export default function Prototype() {
   const savedListings = useMemo(() => saved.map((id) => listingMap[id]).filter(Boolean), [saved, listingMap]);
   const unread = profile ? unreadCount(threads, profile.id) : 0;
   const isAdmin = profile?.role === 'admin';
-
-  const countFor = useCallback(
-    (categoryId: string) => listings.filter((l) => l.categoryId === categoryId && l.status === 'active').length,
-    [listings],
-  );
 
   /* --------------------------------- actions --------------------------------- */
   /** In-app route history so the hardware back button can pop one step. */
@@ -599,12 +634,9 @@ export default function Prototype() {
             listings={listings}
             sellerMap={sellerMap}
             saved={saved}
-            countFor={countFor}
             onOpenListing={openListing}
             onToggleSave={toggleSave}
             onGo={go}
-            onSearch={() => setSearchOpen(true)}
-            onSell={handleSellClick}
           />
         )}
 
@@ -776,7 +808,7 @@ export default function Prototype() {
         )}
 
         {route.name === 'admin' &&
-          (isAdmin ? (
+          (isAdmin || localAdminUnlocked ? (
             <AdminPanel
               ticker={ticker}
               onTicker={updateTicker}
@@ -815,7 +847,13 @@ export default function Prototype() {
           ))}
       </main>
 
-      <Footer onGo={go} isAdmin={isAdmin} categories={categories} />
+      <Footer
+        onGo={go}
+        isAdmin={isAdmin}
+        categories={categories}
+        onAdminHoldStart={startAdminPress}
+        onAdminHoldEnd={cancelAdminPress}
+      />
 
       <BottomNav route={route} savedCount={saved.length} unread={unread} onGo={go} onSell={handleSellClick} />
 
@@ -839,6 +877,30 @@ export default function Prototype() {
         onPendingProfile={onPendingProfile}
         reason={authReason}
       />
+
+      {adminGateOpen && (
+        <div className="admin-gate" role="presentation" onMouseDown={(event) => {
+          if (event.target === event.currentTarget) setAdminGateOpen(false);
+        }}>
+          <form className="admin-gate__card" onSubmit={submitAdminGate}>
+            <button type="button" className="admin-gate__close" onClick={() => setAdminGateOpen(false)} aria-label="Close admin unlock">×</button>
+            <span className="admin-gate__mark">C</span>
+            <h2>Admin access</h2>
+            <p>Enter the admin password to open the existing operations page.</p>
+            <label className="field">
+              <span>Password</span>
+              <input
+                autoFocus
+                type="password"
+                value={adminGatePassword}
+                onChange={(event) => setAdminGatePassword(event.target.value)}
+                placeholder="Enter password"
+              />
+            </label>
+            <button className="btn btn--primary" type="submit">Open admin page</button>
+          </form>
+        </div>
+      )}
 
       {profile && (
         <SellFlow
@@ -874,6 +936,7 @@ export default function Prototype() {
           }}
           onToggleSave={toggleSave}
           onQualifiedView={qualifiedView}
+          onToast={toast}
         />
       )}
 
@@ -1010,250 +1073,144 @@ function HomeView({
   listings,
   sellerMap,
   saved,
-  countFor,
   onOpenListing,
   onToggleSave,
   onGo,
-  onSearch,
-  onSell,
 }: {
   categories: Category[];
   listings: Listing[];
   sellerMap: Record<string, Seller>;
   saved: string[];
-  countFor: (id: string) => number;
   onOpenListing: (id: string) => void;
   onToggleSave: (id: string) => void;
   onGo: (route: Route) => void;
-  onSearch: () => void;
-  onSell: () => void;
 }) {
   const active = listings.filter((l) => l.status === 'active');
-  const featured = active.filter((l) => l.featured).slice(0, 8);
-  const withVideo = active.filter((l) => l.video);
-  const recent = [...active].sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt)).slice(0, 8);
-  const trending = [...active].sort((a, b) => b.todayViews - a.todayViews).slice(0, 8);
-  const totalViews = active.reduce((sum, l) => sum + l.viewCount, 0);
-  // 10 featured reels for the swipeable hero carousel.
-  const reelRail = [...withVideo]
+  const withVideo = active.filter((l) => l.video || l.media?.some((item) => item.kind === 'video'));
+  const heroListings = [...withVideo]
     .sort((a, b) => Number(b.featured) - Number(a.featured) || b.viewCount - a.viewCount)
-    .slice(0, 10);
+    .slice(0, 20);
+  const heroIds = new Set(heroListings.map((listing) => listing.id));
+  // The hero and feed are intentionally two discovery surfaces. Keep the mixed
+  // reel grid populated even when the live database has fewer than 20 videos.
+  const mixedGrid = withVideo.slice(0, 12);
+  const recent = [...active]
+    .filter((listing) => !heroIds.has(listing.id) && !mixedGrid.some((item) => item.id === listing.id))
+    .sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt))
+    .slice(0, 12);
+  const [heroIndex, setHeroIndex] = useState(0);
+  const heroTrackRef = useRef<HTMLDivElement>(null);
+
+  const moveHero = (delta: number) => {
+    if (!heroListings.length) return;
+    const next = Math.min(heroListings.length - 1, Math.max(0, heroIndex + delta));
+    setHeroIndex(next);
+    const track = heroTrackRef.current;
+    const slide = track?.children[next] as HTMLElement | undefined;
+    if (track && slide) {
+      track.scrollTo({ left: slide.offsetLeft - (track.clientWidth - slide.clientWidth) / 2, behavior: 'smooth' });
+    }
+  };
+
+  const visibleCategories = categories.slice(0, 7);
+
+  const mediaStyle = (listing: Listing): CSSProperties => ({
+    backgroundImage: listing.video?.poster ? `url(${listing.video.poster})` : undefined,
+    background: listing.video?.poster ? undefined : listing.photos[0] || 'var(--surface-2)',
+    backgroundSize: 'cover',
+    backgroundPosition: 'center',
+  });
 
   return (
-    <>
-      <section className="hero">
-        <div className="shell hero__grid">
-          <div>
-            <span className="hero__eyebrow">
-              <b>New</b> Video-first classifieds for India
-            </span>
-            <h1 className="hero__title">
-              Everything sold on <em>Reels</em>, indexed in one marketplace.
-            </h1>
-            <p className="hero__sub">
-              EXY aggregates goods, services, materials and businesses advertised across Instagram Reels, YouTube
-              Shorts and Facebook video — with real prices, verified sellers and in-app messaging.
-            </p>
-            {/* Inline action bar — all three fit one row on mobile. */}
-            <div className="hero__cta">
-              <button className="btn btn--primary btn--lg hero__act" onClick={() => onGo({ name: 'feed' })}>
-                <IconFilm size={17} />
-                <span className="hero__act-full">Open visual feed</span>
-                <span className="hero__act-short">Feed</span>
-              </button>
-              <button className="btn btn--ghost btn--lg hero__act" onClick={onSearch}>
-                <IconSearch size={17} />
-                <span className="hero__act-full">Search marketplace</span>
-                <span className="hero__act-short">Search</span>
-              </button>
-              <button className="btn btn--ghost btn--lg hero__act" onClick={onSell}>
-                <IconPlus size={17} />
-                <span className="hero__act-full">Post listing</span>
-                <span className="hero__act-short">Sell</span>
-              </button>
-            </div>
-
-            {/* Swipeable reel carousel */}
-            {reelRail.length > 0 && (
-              <div className="reel-rail swipe-x">
-                {reelRail.map((listing) => (
-                  <button
-                    key={listing.id}
-                    className="reel-card"
-                    onClick={() => onGo({ name: 'feed', startId: listing.id })}
-                  >
-                    <span
-                      className="reel-card__media"
-                      style={
-                        listing.video?.poster
-                          ? { backgroundImage: `url(${listing.video.poster})` }
-                          : { background: listing.photos[0] }
-                      }
-                    />
-                    <span className="reel-card__plays">
-                      <IconPlay size={9} /> {compact(listing.viewCount)}
-                    </span>
-                    <span className="reel-card__foot">
-                      <b>{inr(listing.price)}</b>
-                      <span>{listing.city}</span>
-                    </span>
-                  </button>
-                ))}
-              </div>
-            )}
-            <div className="hero__stats">
-              <div className="hero__stat">
-                <b>{active.length}</b>
-                <span>Live listings</span>
-              </div>
-              <div className="hero__stat">
-                <b>{withVideo.length}</b>
-                <span>With video</span>
-              </div>
-              <div className="hero__stat">
-                <b>{categories.length}</b>
-                <span>Categories</span>
-              </div>
-              <div className="hero__stat">
-                <b>{compact(totalViews)}</b>
-                <span>Buyer views</span>
-              </div>
-            </div>
-          </div>
-
-          <div className="hero__media">
-            {withVideo.slice(0, 2).map((listing) => (
-              <button key={listing.id} className="hero__card" onClick={() => onGo({ name: 'feed', startId: listing.id })}>
-                <span
-                  className="hero__card-media"
-                  style={
-                    listing.video?.poster
-                      ? { backgroundImage: `url(${listing.video.poster})`, backgroundSize: 'cover', backgroundPosition: 'center' }
-                      : { background: listing.photos[0] }
-                  }
-                />
-                <span className="hero__play">
-                  <IconVideo size={12} /> Reel
-                </span>
-                <span className="hero__card-body">
-                  <b>{listing.title}</b>
-                  <span>{inr(listing.price)}</span>
-                </span>
-              </button>
-            ))}
-          </div>
+    <div className="home-c">
+      <section className="home-c__categories shell">
+        <div className="home-c__section-head">
+          <h2>Browse categories</h2>
+          <button className="home-c__link" onClick={() => onGo({ name: 'browse' })}>View all <IconArrow size={14} /></button>
+        </div>
+        <div className="home-c__category-rail swipe-x">
+          {visibleCategories.map((category) => (
+            <button key={category.id} className="home-c__category" onClick={() => onGo({ name: 'browse', categoryId: category.id })}>
+              <CategoryOrb category={category} />
+              <span>{category.name.replace(' & ', ' · ')}</span>
+            </button>
+          ))}
         </div>
       </section>
 
-      <div className="shell">
-        <section className="section">
-          <div className="section__head">
-            <div>
-              <h2 className="section__title">Browse categories</h2>
-              <p className="section__sub">
-                Every category is video-indexed — tap through to see reels, prices and verified sellers.
-              </p>
-            </div>
-            <button className="section__link" onClick={() => onGo({ name: 'browse' })}>
-              View all <IconArrow size={15} />
-            </button>
+      <section className="home-c__hero shell">
+        <div className="home-c__section-head">
+          <div>
+            <h1>Video listings</h1>
+            <p>Swipe left or right to explore {heroListings.length || 0} videos.</p>
           </div>
-          <div className="cat-grid">
-            {categories.map((category) => (
-              <button key={category.id} className="cat-card" onClick={() => onGo({ name: 'browse', categoryId: category.id })}>
-                <CategoryOrb category={category} />
-                <span className="cat-card__name">{category.name}</span>
-                <span className="cat-card__count">{countFor(category.id)} live ads</span>
+          <button className="home-c__link" onClick={() => onGo({ name: 'feed', startId: heroListings[heroIndex]?.id })} disabled={!heroListings.length}>
+            Open feed <IconFilm size={14} />
+          </button>
+        </div>
+        {heroListings.length ? (
+          <>
+            <div className="home-c__hero-rail swipe-x" ref={heroTrackRef}>
+              {heroListings.map((listing, index) => (
+                <button
+                  key={listing.id}
+                  className={`home-c__hero-card${index === heroIndex ? ' is-active' : ''}`}
+                  onClick={() => onGo({ name: 'feed', startId: listing.id })}
+                  onFocus={() => setHeroIndex(index)}
+                >
+                  <span className="home-c__hero-media" style={mediaStyle(listing)} />
+                  <span className="home-c__hero-platform"><IconVideo size={12} /> {listing.video ? providerLabel(listing.video.provider) : 'EXY video'}</span>
+                  <span className="home-c__hero-play"><IconPlay size={22} /></span>
+                  <span className="home-c__hero-info">
+                    <b>{listing.title}</b>
+                    <strong>{inr(listing.price)}</strong>
+                    <small><IconPin size={12} /> {listing.city}</small>
+                  </span>
+                </button>
+              ))}
+            </div>
+            <div className="home-c__hero-controls">
+              <button onClick={() => moveHero(-1)} disabled={heroIndex === 0} aria-label="Previous video"><IconChevron size={18} /></button>
+              <span>{heroIndex + 1} / {heroListings.length}</span>
+              <button onClick={() => moveHero(1)} disabled={heroIndex === heroListings.length - 1} aria-label="Next video"><span className="home-c__chevron-flip"><IconChevron size={18} /></span></button>
+            </div>
+            <div className="home-c__hero-hint">Tap a video to open the vertical feed · swipe up/down there for more</div>
+          </>
+        ) : (
+          <Empty icon={<IconFilm size={28} />} title="No video listings yet" message="Published videos will appear here when a seller or admin goes live." />
+        )}
+      </section>
+
+      {mixedGrid.length > 0 && (
+        <section className="home-c__grid shell">
+          <div className="home-c__section-head">
+            <div><h2>Fresh from the feed</h2><p>Instagram, Facebook and YouTube listings in one stream.</p></div>
+            <button className="home-c__link" onClick={() => onGo({ name: 'feed' })}>View all <IconArrow size={14} /></button>
+          </div>
+          <div className="home-c__masonry">
+            {mixedGrid.map((listing) => (
+              <button key={listing.id} className="home-c__tile" onClick={() => onGo({ name: 'feed', startId: listing.id })}>
+                <span className="home-c__tile-media" style={mediaStyle(listing)} />
+                <span className="home-c__tile-provider">{listing.video ? providerLabel(listing.video.provider) : 'EXY video'}</span>
+                <span className="home-c__tile-play"><IconPlay size={18} /></span>
+                <span className="home-c__tile-info"><b>{listing.title}</b><strong>{inr(listing.price)}</strong><small>{listing.city}</small></span>
               </button>
             ))}
           </div>
         </section>
+      )}
 
-        {featured.length > 0 && (
-          <section className="section">
-            <div className="section__head">
-              <div>
-                <h2 className="section__title">Featured storefront picks</h2>
-                <p className="section__sub">Paid placements from Comprehensive and Dealer tier sellers.</p>
-              </div>
-            </div>
-            <div className="listing-grid">
-              {featured.map((listing) => (
-                <ListingCard
-                  key={listing.id}
-                  listing={listing}
-                  seller={sellerMap[listing.sellerId]}
-                  saved={saved.includes(listing.id)}
-                  onOpen={onOpenListing}
-                  onToggleSave={onToggleSave}
-                />
-              ))}
-            </div>
-          </section>
-        )}
-
-        {/* Honest empty state — no fake listings when the database has none. */}
-        {active.length === 0 && (
-          <section className="section">
-            <Empty
-              icon={<IconFilm size={28} />}
-              title="No listings published yet"
-              message="Published ads appear here the moment a seller or admin goes live."
-              action={
-                <button className="btn btn--primary" onClick={onSell}>
-                  <IconPlus size={16} /> Post the first listing
-                </button>
-              }
-            />
-          </section>
-        )}
-
-        <section className="section" style={active.length === 0 ? { display: 'none' } : undefined}>
-          <div className="section__head">
-            <div>
-              <h2 className="section__title">Trending today</h2>
-              <p className="section__sub">Ranked by qualified buyer views in the last 24 hours.</p>
-            </div>
-          </div>
-          <div className="listing-grid">
-            {trending.map((listing) => (
-              <ListingCard
-                key={listing.id}
-                listing={listing}
-                seller={sellerMap[listing.sellerId]}
-                saved={saved.includes(listing.id)}
-                onOpen={onOpenListing}
-                onToggleSave={onToggleSave}
-              />
-            ))}
-          </div>
+      {recent.length > 0 && (
+        <section className="section shell home-c__more">
+          <div className="section__head"><div><h2 className="section__title">More ads on EXY</h2><p className="section__sub">Continue browsing every published listing.</p></div></div>
+          <div className="listing-grid">{recent.map((listing) => <ListingCard key={listing.id} listing={listing} seller={sellerMap[listing.sellerId]} saved={saved.includes(listing.id)} onOpen={onOpenListing} onToggleSave={onToggleSave} />)}</div>
         </section>
+      )}
 
-        <section className="section" style={active.length === 0 ? { display: 'none' } : undefined}>
-          <div className="section__head">
-            <div>
-              <h2 className="section__title">Fresh on EXY</h2>
-              <p className="section__sub">The newest reels and photo listings across every category.</p>
-            </div>
-            <button className="section__link" onClick={() => onGo({ name: 'browse' })}>
-              See everything <IconArrow size={15} />
-            </button>
-          </div>
-          <div className="listing-grid">
-            {recent.map((listing) => (
-              <ListingCard
-                key={listing.id}
-                listing={listing}
-                seller={sellerMap[listing.sellerId]}
-                saved={saved.includes(listing.id)}
-                onOpen={onOpenListing}
-                onToggleSave={onToggleSave}
-              />
-            ))}
-          </div>
-        </section>
-      </div>
-    </>
+      {active.length === 0 && !heroListings.length && (
+        <section className="section shell"><Empty icon={<IconFilm size={28} />} title="No listings published yet" message="Published ads appear here the moment a seller or admin goes live." /></section>
+      )}
+    </div>
   );
 }
 
@@ -2484,7 +2441,7 @@ function ProfileView({
                 Project: {isSupabaseLive ? new URL(import.meta.env.VITE_SUPABASE_URL as string).host : '—'}<br />
                 Signed in: {profile ? 'yes' : 'no'}<br />
                 Role: {profile?.role ?? '—'}<br />
-                v1.5.0
+                v1.5.4
               </div>
               <button className="btn btn--danger" onClick={onSignOut} style={{ marginTop: 12 }}>
                 Log out
@@ -2504,10 +2461,14 @@ function Footer({
   onGo,
   isAdmin,
   categories,
+  onAdminHoldStart,
+  onAdminHoldEnd,
 }: {
   onGo: (route: Route) => void;
   isAdmin: boolean;
   categories: Category[];
+  onAdminHoldStart: () => void;
+  onAdminHoldEnd: () => void;
 }) {
   return (
     <footer className="footer">
@@ -2577,9 +2538,22 @@ function Footer({
         </div>
 
         <div className="footer__bottom">
-          <span>© {new Date().getFullYear()} EXY Classifieds. Built for India. v1.5.0</span>
+          <span>© {new Date().getFullYear()} EXY Classifieds. Built for India. <small className="app-version">v1.5.4</small></span>
           <span>Instagram · YouTube Shorts · Facebook Reels · TikTok indexing</span>
         </div>
+        <button
+          className="footer__admin-trigger"
+          type="button"
+          aria-label="Hold for admin access"
+          onPointerDown={onAdminHoldStart}
+          onPointerUp={onAdminHoldEnd}
+          onPointerCancel={onAdminHoldEnd}
+          onPointerLeave={onAdminHoldEnd}
+          onContextMenu={(event) => event.preventDefault()}
+        >
+          <span className="footer__admin-mark">C</span>
+          <span>Hold 3 seconds</span>
+        </button>
       </div>
     </footer>
   );

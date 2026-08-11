@@ -2,17 +2,20 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Listing, Seller } from '../types';
 import { providerAllow } from '../lib/embeds';
 import { compact, inr } from '../lib/format';
+import { openOriginal } from '../lib/playback';
 import {
   IconChat,
   IconChevron,
   IconClose,
   IconEye,
   IconHeart,
-  IconMuted,
+  IconLink,
   IconPhone,
+  IconShare,
   IconSend,
   IconShield,
-  IconUnmuted,
+  IconStore,
+  IconTag,
 } from './Icons';
 
 /* -------------------------------------------------------------------------- */
@@ -59,6 +62,7 @@ interface Props {
   onCallback: (listingId: string) => void;
   onToggleSave: (listingId: string) => void;
   onQualifiedView: (listingId: string, dwellSec: number) => void;
+  onToast?: (message: string, kind?: 'ok' | 'err' | 'info') => void;
 }
 
 /**
@@ -75,8 +79,8 @@ export function LiveClassifiedsOverlay({
   onCallback,
   onToggleSave,
   onQualifiedView,
+  onToast,
 }: Props) {
-  const [muted, setMuted] = useState(true);
   const [minimized, setMinimized] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [comments, setComments] = useState<LiveComment[]>([]);
@@ -89,6 +93,7 @@ export function LiveClassifiedsOverlay({
   const countedRef = useRef(false);
   const streamRef = useRef<HTMLDivElement>(null);
   const trackRef = useRef<HTMLDivElement>(null);
+  const playerRef = useRef<HTMLDivElement>(null);
   const dragging = useRef(false);
 
   const story = useMemo(() => sellerStory(listing, seller), [listing, seller]);
@@ -113,7 +118,6 @@ export function LiveClassifiedsOverlay({
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape') onClose();
-      if (event.key === 'm') setMuted((prev) => !prev);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -168,18 +172,45 @@ export function LiveClassifiedsOverlay({
     setDraft('');
   }
 
+  async function shareListing() {
+    const url = listing.video?.url || window.location.href;
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: listing.title, text: listing.description, url });
+        return;
+      }
+      await navigator.clipboard.writeText(url);
+      onToast?.('Listing link copied', 'ok');
+    } catch {
+      onToast?.('Share cancelled', 'info');
+    }
+  }
+
+  function focusSoundControl() {
+    const native = playerRef.current?.querySelector('video');
+    if (native instanceof HTMLVideoElement) {
+      native.muted = !native.muted;
+      native.focus();
+      onToast?.(native.muted ? 'Sound muted' : 'Sound on', 'info');
+      return;
+    }
+    const iframe = playerRef.current?.querySelector('iframe');
+    if (iframe instanceof HTMLIFrameElement) iframe.focus();
+    onToast?.('Use the speaker control inside the video player.', 'info');
+  }
+
   return (
     <div className={`lco${minimized ? ' is-min' : ''}`} role="dialog" aria-modal="true" aria-label={listing.title}>
       <div className="lco__backdrop" onClick={onClose} />
 
       <div className="lco__stage">
         {/* ------------------------------ video ------------------------------ */}
-        <div className="lco__video">
+        <div className="lco__video" ref={playerRef}>
           {nativeVideo ? (
-            <video src={nativeVideo.src} poster={nativeVideo.poster} muted={muted} autoPlay loop playsInline />
+            <video src={nativeVideo.src} poster={nativeVideo.poster} muted autoPlay loop playsInline controls />
           ) : listing.video ? (
             <iframe
-              src={`${listing.video.embedSrc}${listing.video.provider === 'youtube' ? `&autoplay=1&mute=${muted ? 1 : 0}&controls=0` : ''}`}
+              src={`${listing.video.embedSrc}${listing.video.provider === 'youtube' ? `${listing.video.embedSrc.includes('?') ? '&' : '?'}autoplay=1&mute=1&controls=1&playsinline=1&rel=0` : ''}`}
               title={listing.title}
               allow={providerAllow(listing.video.provider)}
               allowFullScreen
@@ -188,32 +219,6 @@ export function LiveClassifiedsOverlay({
             <div className="lco__fallback" style={{ background: listing.photos[0] }} />
           )}
 
-          {/* 4.1 + 4.4 — mute and minimise sit together, bottom right */}
-          <div className="lco__controls">
-            <button
-              className={`lco__mute${muted ? '' : ' is-live'}`}
-              onClick={(event) => {
-                event.stopPropagation();
-                setMuted((prev) => !prev);
-              }}
-              aria-label={muted ? 'Unmute' : 'Mute'}
-              title={muted ? 'Unmute' : 'Mute'}
-            >
-              {muted ? <IconMuted size={22} /> : <IconUnmuted size={22} />}
-              <span>{muted ? 'Tap for sound' : 'Sound on'}</span>
-            </button>
-            <button
-              className={`lco__ctl${minimized ? ' is-live' : ''}`}
-              onClick={() => setMinimized((prev) => !prev)}
-              aria-label={minimized ? 'Show classifieds overlay' : 'Minimise overlay'}
-              title={minimized ? 'Show overlay' : 'Hide overlay for full screen'}
-            >
-              <span style={{ display: 'grid', transform: minimized ? 'rotate(180deg)' : 'none' }}>
-                <IconChevron size={18} />
-              </span>
-            </button>
-          </div>
-
           {/* 4.4 — minimised state keeps only a subtle price pill */}
           {minimized && (
             <button className="lco__pricepill" onClick={() => setMinimized(false)}>
@@ -221,6 +226,21 @@ export function LiveClassifiedsOverlay({
               <span>Tap for details</span>
             </button>
           )}
+
+          <div className="lco__action-rail" aria-label="Player actions">
+            <button className="lco__action" onClick={shareListing} aria-label="Share listing">
+              <IconShare size={21} /><span>Share</span>
+            </button>
+            <button className="lco__action" onClick={() => onMessage(listing.id)} aria-label="Message seller">
+              <IconChat size={21} /><span>Message</span>
+            </button>
+            <button className={`lco__action${saved ? ' is-on' : ''}`} onClick={() => onToggleSave(listing.id)} aria-label="Save listing">
+              <IconHeart size={21} filled={saved} /><span>{saved ? 'Saved' : 'Save'}</span>
+            </button>
+            <button className="lco__action" onClick={focusSoundControl} aria-label="Sound controls" title="Use the player sound control">
+              <span className="lco__action-glyph">◖))</span><span>Sound</span>
+            </button>
+          </div>
         </div>
 
         {/* --------------------- 4.2 live lead sidebar ---------------------- */}
@@ -311,6 +331,14 @@ export function LiveClassifiedsOverlay({
               >
                 <IconHeart size={19} filled={saved} />
               </button>
+            </div>
+
+            <div className="lco__action-row" aria-label="Listing actions">
+              <button onClick={() => onToggleSave(listing.id)}><IconHeart size={16} filled={saved} /> {saved ? 'Saved' : 'Save'}</button>
+              <button onClick={() => onMessage(listing.id)}><IconChat size={16} /> Text</button>
+              <button onClick={() => listing.video?.url && openOriginal(listing.video.url)}><IconLink size={16} /> Original</button>
+              <button onClick={() => document.querySelector('.lco__side')?.scrollIntoView({ behavior: 'smooth' })}><IconStore size={16} /> Seller</button>
+              <button onClick={() => onCallback(listing.id)}><IconTag size={16} /> Advertise</button>
             </div>
 
             <div className="lco__actions">
