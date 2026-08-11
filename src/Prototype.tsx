@@ -2441,7 +2441,7 @@ function ProfileView({
                 Project: {isSupabaseLive ? new URL(import.meta.env.VITE_SUPABASE_URL as string).host : '—'}<br />
                 Signed in: {profile ? 'yes' : 'no'}<br />
                 Role: {profile?.role ?? '—'}<br />
-                v1.5.5
+                v1.5.6
               </div>
               <button className="btn btn--danger" onClick={onSignOut} style={{ marginTop: 12 }}>
                 Log out
@@ -2538,7 +2538,7 @@ function Footer({
         </div>
 
         <div className="footer__bottom">
-          <span>© {new Date().getFullYear()} EXY Classifieds. Built for India. <small className="app-version">v1.5.5</small></span>
+          <span>© {new Date().getFullYear()} EXY Classifieds. Built for India. <small className="app-version">v1.5.6</small></span>
           <span>Instagram · YouTube Shorts · Facebook Reels · TikTok indexing</span>
         </div>
         <button
