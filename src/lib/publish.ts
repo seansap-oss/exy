@@ -225,11 +225,18 @@ export async function saveTicker(config: TickerConfig, publishLive: boolean): Pr
       visible: publishLive ? config.enabled : false,
       updated_at: new Date().toISOString(),
     };
-    const { data, error } = await supabase
-      .from('ticker_settings')
-      .upsert(row, { onConflict: 'id' })
-      .select('id')
-      .single();
+    const write = (payload: Record<string, unknown>) =>
+      supabase!.from('ticker_settings').upsert(payload, { onConflict: 'id' }).select('id').single();
+    let { data, error } = await write(row);
+    if (
+      error &&
+      (error.code === '42703' || error.code === 'PGRST204' || error.code === 'PGRST205' ||
+        /schema cache|column .* does not exist/i.test(error.message))
+    ) {
+      const { playing: _playing, loop: _loop, font: _font, font_size: _fontSize, default_color: _defaultColor,
+        show_featured: _showFeatured, min_tier: _minTier, ...canonicalRow } = row;
+      ({ data, error } = await write(canonicalRow));
+    }
     if (error) {
       return { ok: false, id: null, operation: 'update', error: error.message, reason: classify(error.message) };
     }

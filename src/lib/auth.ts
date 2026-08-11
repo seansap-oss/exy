@@ -216,12 +216,16 @@ export async function signIn(email: string, password: string): Promise<AuthResul
       }
       return { ok: false, error: error.message };
     }
-    if (!data.user.email_confirmed_at) return { ok: false, error: 'Please confirm your email before signing in.', needsEmailVerification: true };
-
-    const { data: row } = await supabase.from(SUPABASE_TABLES.profiles).select('*').eq('id', data.user.id).single();
+    const { data: row, error: profileError } = await supabase
+      .from(SUPABASE_TABLES.profiles)
+      .select('*')
+      .eq('id', data.user.id)
+      .maybeSingle();
+    if (profileError) return { ok: false, error: `Signed in, but your EXY profile could not be loaded: ${profileError.message}` };
+    if (!row) return { ok: false, error: 'Signed in, but no EXY profile exists for this account. Run the profile migration or contact the administrator.' };
     return {
       ok: true,
-      profile: row ? rowToProfile(row) : undefined,
+      profile: rowToProfile(row),
       session: {
         accessToken: data.session.access_token,
         refreshToken: data.session.refresh_token,
