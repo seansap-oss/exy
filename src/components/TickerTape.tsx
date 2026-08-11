@@ -55,7 +55,7 @@ export function TickerTape({ config: incoming, listings, onDismiss, onOpenListin
    */
   const config: TickerConfig = {
     ...DEFAULT_TICKER,
-    ...(incoming ?? {}),
+    ...incoming,
     enabled: incoming?.enabled ?? true,
     segments: incoming?.segments?.length ? incoming.segments : DEFAULT_TICKER.segments,
   };

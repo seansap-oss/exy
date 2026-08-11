@@ -1,11 +1,16 @@
 {
   "name": "exy",
   "private": true,
-  "version": "1.5.4",
+  "version": "1.5.5",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "env:check": "node scripts/verify-supabase-env.mjs",
+    "backend:check": "node scripts/check-supabase-live.mjs",
+    "build:release": "npm run env:check && npm run build",
+    "verify:release": "npm run env:check && oxlint src api && tsc -b && vite build",
+    "android:prepare": "npm run build:release && npx cap copy android",
     "lint": "oxlint",
     "preview": "vite preview",
     "build:watch": "node scripts/build-watch.mjs",

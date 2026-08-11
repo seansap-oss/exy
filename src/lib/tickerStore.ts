@@ -102,16 +102,15 @@ export async function fetchTicker(): Promise<TickerConfig | null> {
   }
 }
 
-/** Persists locally first (instant), then upserts to Supabase when configured. */
+/**
+ * Mirrors a database-confirmed ticker change locally and across open clients.
+ * Remote writes deliberately live only in saveTicker(), which returns a real
+ * success/failure result to the Admin UI. This prevents a local preview from
+ * being mistaken for a successful production save.
+ */
 export async function persistTicker(config: TickerConfig): Promise<void> {
   save('ticker', config);
   broadcastTicker(config);
-  if (!isSupabaseLive || !supabase) return;
-  try {
-    await supabase.from(TABLE).upsert(configToRow(config), { onConflict: 'id' });
-  } catch {
-    /* offline-tolerant: local state remains the source of truth */
-  }
 }
 
 /* -------------------------------------------------------------------------- */

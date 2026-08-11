@@ -208,7 +208,10 @@ export interface PublishResult {
  * landed. A failure is surfaced, never swallowed.
  */
 export async function publishListing(listing: Listing): Promise<PublishResult> {
-  if (!isSupabaseLive || !supabase) return { ok: true, id: listing.id, error: null };
+  // A production publish must never silently become a local-only success.
+  if (!isSupabaseLive || !supabase) {
+    return { ok: false, id: null, error: 'Supabase is not configured — nothing was written to the live database.' };
+  }
   try {
     const { data, error } = await supabase.from(TABLE).insert(listingToRow(listing)).select('id').single();
     if (error) return { ok: false, id: null, error: error.message };
