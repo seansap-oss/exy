@@ -2776,6 +2776,28 @@ ul {
   object-fit: cover;
 }
 
+.lco__provider-embed {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  background: #0d0c0a;
+}
+
+.lco__provider-embed .video {
+  width: 100%;
+  height: 100%;
+  max-height: none;
+  border: 0;
+  border-radius: 0;
+}
+
+.lco__provider-embed .video__embed,
+.lco__provider-embed .video__embed iframe,
+.lco__provider-embed .video__embed blockquote {
+  min-height: 100%;
+  height: 100%;
+}
+
 .lco__action-rail {
   position: absolute;
   right: 16px;
@@ -4277,6 +4299,39 @@ ul {
   background: #000;
 }
 
+/* The official Instagram/Facebook embed is nested one level deeper than a
+   native/Youtube iframe. Keep that mount constrained to the same 9:16 player
+   frame so provider markup cannot zoom or spill over the listing controls. */
+.fs-player__frame .video,
+.fs-player__frame .video__embed,
+.fs-player__frame .video__provider-state {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  aspect-ratio: auto;
+  border-radius: 0;
+}
+
+.fs-player__frame .video__embed {
+  display: grid;
+  place-items: center;
+}
+
+.fs-player__frame .video__embed > iframe,
+.fs-player__frame .video__embed blockquote,
+.fs-player__frame .video__embed blockquote iframe {
+  position: absolute !important;
+  inset: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  min-height: 0 !important;
+  max-width: none !important;
+  margin: 0 !important;
+  border: 0 !important;
+}
+
 .fs-player__bar {
   position: absolute;
   inset: auto 0 0 0;
@@ -5216,6 +5271,102 @@ ul {
   z-index: 6;
 }
 
+/* ===========================================================================
+   Social player containment
+   ---------------------------------------------------------------------------
+   There is exactly one player canvas in both full-screen experiences. Do not
+   use container-query sizing here: the older min()/cqw calculation created a
+   second, smaller frame and let provider content appear cropped or zoomed.
+   YouTube, a public Instagram post, and EXY's Facebook hand-off all now fill
+   the same already-portrait 9:16 canvas. Provider UI may letterbox internally,
+   but EXY never scales or crops a provider frame.
+   =========================================================================== */
+.lco__video > .video,
+.fs-player__frame > .video {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  max-height: none;
+  aspect-ratio: auto;
+  overflow: hidden;
+  border: 0;
+  border-radius: 0;
+  background: #000;
+  isolation: isolate;
+}
+
+.lco__video > .video .video__frame,
+.fs-player__frame > .video .video__frame {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  max-width: 100%;
+  max-height: 100%;
+  border: 0;
+  background: #000;
+}
+
+.lco__video > .video .video__social-stage,
+.fs-player__frame > .video .video__social-stage {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  display: grid;
+  place-items: stretch;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  max-width: 100%;
+  max-height: 100%;
+  overflow: hidden;
+  background: #000;
+  isolation: isolate;
+  contain: layout paint;
+}
+
+.video__social-stage--instagram,
+.video__social-stage--facebook {
+  aspect-ratio: 9 / 16;
+}
+
+.lco__video > .video .video__social-stage > .video__frame,
+.fs-player__frame > .video .video__social-stage > .video__frame {
+  position: absolute !important;
+  inset: 0 !important;
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+  min-width: 0;
+  min-height: 0;
+  max-width: 100%;
+  max-height: 100%;
+  aspect-ratio: auto;
+  border: 0;
+  background: #000;
+  transform: translateZ(0);
+}
+
+/* The EXY action rail and listing information always sit above provider UI. */
+.lco__action-rail,
+.lco__details,
+.lco__original,
+.lco__fs,
+.lco__close,
+.lco__message-sheet,
+.lco__message-backdrop {
+  z-index: 80;
+}
+
 .lco__close:hover {
   background: rgba(255, 255, 255, 0.24);
 }
@@ -5946,14 +6097,70 @@ ul {
 .mp__fallback {
   position: absolute;
   inset: 0;
+  isolation: isolate;
+  overflow: hidden;
+  background: #111;
+}
+
+.mp__avatar-blur {
+  position: absolute;
+  inset: -18px;
+  z-index: -2;
+  width: calc(100% + 36px);
+  height: calc(100% + 36px);
+  object-fit: cover;
+  opacity: 0.46;
+  filter: blur(20px);
+  transform: scale(1.08);
+}
+
+.mp__fallback-shade {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background:
+    linear-gradient(180deg, rgba(12, 12, 13, 0.18), rgba(12, 12, 13, 0.9)),
+    radial-gradient(120% 100% at 50% 0%, rgba(255, 149, 0, 0.14), transparent 62%),
+    repeating-linear-gradient(135deg, rgba(255, 255, 255, 0.035) 0 12px, transparent 12px 24px);
+}
+
+.mp__fallback-content {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 7px;
-  background:
-    radial-gradient(120% 100% at 50% 0%, rgba(255, 149, 0, 0.16), transparent 62%),
-    repeating-linear-gradient(135deg, rgba(255, 255, 255, 0.035) 0 12px, transparent 12px 24px);
+}
+
+.mp__identity,
+.mp__avatar,
+.mp__avatar-letter {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+}
+
+.mp__identity {
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.42);
+  background: rgba(17, 17, 17, 0.55);
+}
+
+.mp__avatar { object-fit: cover; }
+
+.mp__avatar-letter {
+  display: grid;
+  place-items: center;
+  color: #17130a;
+  background: var(--accent);
+  font-size: 12px;
+  font-weight: 800;
 }
 
 .mp__mark {
@@ -5973,6 +6180,30 @@ ul {
   padding: 3px 9px;
   border-radius: var(--r-pill);
   border: 1px solid rgba(255, 255, 255, 0.18);
+}
+
+.mp__title {
+  max-width: 86%;
+  color: #fff;
+  font-size: clamp(13px, 2.6vw, 18px);
+  line-height: 1.2;
+  text-align: center;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.mp__meta {
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.mp__price {
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 800;
 }
 
 /* Native uploaded video inside the player frame */
@@ -6212,6 +6443,128 @@ ul {
   margin: 0 !important;
 }
 
+/* Social providers decide whether a post may be embedded. Keep EXY's player
+   informative when a public-looking URL is actually private, deleted, or
+   blocked by the provider instead of exposing a blank provider frame. */
+.video__provider-state {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  isolation: isolate;
+  background:
+    radial-gradient(circle at 50% 34%, rgba(255, 180, 35, 0.16), transparent 26%),
+    linear-gradient(160deg, #17140e 0%, #0a0a0b 58%, #050505 100%);
+}
+
+.video__provider-state::before {
+  content: '';
+  position: absolute;
+  inset: 12px;
+  z-index: -1;
+  border: 1px solid rgba(255, 190, 60, 0.2);
+  border-radius: 22px;
+  pointer-events: none;
+}
+
+.video__provider-brand {
+  position: absolute;
+  z-index: 2;
+  top: 18px;
+  left: 18px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: rgba(255, 255, 255, 0.96);
+  text-align: left;
+}
+
+.video__provider-mark {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border-radius: 11px;
+  background: linear-gradient(135deg, #ffbe42, #e88c20);
+  color: #16120a;
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: -0.06em;
+}
+
+.video__provider-name {
+  font-size: 14px;
+  font-weight: 850;
+  letter-spacing: -0.04em;
+}
+
+.video__provider-platform {
+  padding: 5px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 999px;
+  background: rgba(12, 12, 13, 0.72);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 780;
+  white-space: nowrap;
+}
+
+.video__provider-copy {
+  position: absolute;
+  z-index: 1;
+  left: 16px;
+  right: 16px;
+  bottom: 60px;
+  display: grid;
+  gap: 5px;
+  color: #fff;
+  text-align: left;
+}
+
+.video__provider-copy b {
+  font-size: 14px;
+  line-height: 1.25;
+}
+
+.video__provider-copy span {
+  color: rgba(255, 255, 255, 0.76);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+/* The provider action stays inside the same fitted 9:16 EXY canvas. It is
+   intentionally used for Facebook and for an Instagram post that Meta blocks
+   from third-party playback. */
+.video__provider-action {
+  position: absolute;
+  z-index: 3;
+  left: 50%;
+  top: 50%;
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 18px;
+  transform: translate(-50%, -50%);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 999px;
+  background: rgba(18, 16, 12, 0.9);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+  color: #fff;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 850;
+  white-space: nowrap;
+}
+
+.video__provider-action:hover,
+.video__provider-action:focus-visible {
+  border-color: var(--accent, #ffb300);
+  color: var(--accent-2, #ffd05c);
+}
+
 @media (max-width: 760px) {
   .video__embed {
     min-height: 240px;
@@ -6222,6 +6575,108 @@ ul {
 .pw-wrap {
   position: relative;
   display: block;
+}
+
+/* ===========================================================================
+   v1.5.21 — contained Meta playback
+   IG is a portrait player; Facebook can be portrait or a 16:9 video.  The
+   old rules stretched both provider frames to fill EXY's 9:16 stage, which
+   cropped/zoomed them and allowed provider markup to overlap player controls.
+   The provider remains in control of whether a public post can be embedded;
+   EXY keeps its own fallback and Open original action inside the stage.
+   =========================================================================== */
+.lco__provider-embed,
+.fs-player__frame .video {
+  isolation: isolate;
+}
+
+.lco__provider-embed .video,
+.fs-player__frame .video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  max-height: none;
+  border: 0;
+  border-radius: 0;
+  background: #000;
+}
+
+.lco__provider-embed .video__embed,
+.fs-player__frame .video__embed {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  min-height: 0;
+  overflow: hidden;
+  background: #000;
+  contain: layout paint;
+}
+
+.lco__provider-embed .video__embed > blockquote,
+.fs-player__frame .video__embed > blockquote {
+  position: relative !important;
+  inset: auto !important;
+  display: block !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  max-height: 100% !important;
+  margin: 0 !important;
+  overflow: hidden !important;
+}
+
+/* Instagram's official iframe is portrait. It fills the portrait stage but
+   never exceeds it, regardless of the dimensions returned by embed.js. */
+.lco__provider-embed .video__embed--instagram iframe,
+.fs-player__frame .video__embed--instagram iframe {
+  position: relative !important;
+  inset: auto !important;
+  display: block !important;
+  width: 100% !important;
+  height: 100% !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  max-width: 540px !important;
+  max-height: 100% !important;
+  margin: 0 auto !important;
+  border: 0 !important;
+}
+
+.lco__provider-embed .video__provider-state,
+.fs-player__frame .video__provider-state {
+  position: absolute;
+  inset: 0;
+  min-height: 0;
+}
+
+/* Do not render the inner provider action under the close/fullscreen buttons.
+   FullscreenPlayer has fs-player__open and the live viewer has lco__original. */
+.lco__provider-embed .video__open,
+.fs-player__frame .video__open {
+  display: none;
+}
+
+.lco__original {
+  position: fixed;
+  z-index: 71;
+  top: max(14px, env(safe-area-inset-top, 0px));
+  left: 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 38px;
+  padding: 0 12px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 999px;
+  background: rgba(12, 11, 9, 0.82);
+  backdrop-filter: blur(10px);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 800;
 }
 
 .pw-wrap .input {

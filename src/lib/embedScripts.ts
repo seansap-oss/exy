@@ -1,16 +1,13 @@
 import { fetchOEmbed, usesOEmbedProxy } from './oembed';
 
 /**
- * Loads the official Instagram embed.js and Facebook SDK exactly once per page
- * lifetime, then re-parses the DOM whenever new embed HTML is injected by
- * React. Both providers require their script to turn a static <blockquote>
- * into an interactive iframe.
+ * Loads Instagram's official embed script exactly once per page lifetime.
+ * Facebook is deliberately external-only and has no SDK or iframe route in
+ * EXY, so it cannot replace the 9:16 player with a provider error screen.
  */
 
 let instagramLoading: Promise<void> | null = null;
-let facebookLoading: Promise<void> | null = null;
 let instagramReady = false;
-let facebookReady = false;
 
 function loadScript(src: string, globalName: string): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -45,43 +42,18 @@ export function loadInstagramEmbeds(): Promise<void> {
   return instagramLoading;
 }
 
-/** Loads Facebook SDK. Safe to call repeatedly. */
-export function loadFacebookSDK(): Promise<void> {
-  if (facebookReady) return Promise.resolve();
-  if (facebookLoading) return facebookLoading;
-
-  facebookLoading = loadScript(
-    'https://connect.facebook.net/en_US/sdk.js#xfbml=1&version=v26.0',
-    'facebook-jssdk',
-  )
-    .then(() => {
-      facebookReady = true;
-    })
-    .catch(() => {
-      facebookLoading = null;
-    });
-
-  return facebookLoading;
-}
-
 /**
- * Re-parses the DOM so newly-injected embed <blockquote> elements become
- * interactive iframes. Must be called after React commits the embed HTML.
+ * Re-parses injected Instagram embed HTML after React commits it.
  */
 export function processEmbeds(): void {
   if (typeof window === 'undefined') return;
 
-  if (instagramReady && (window as any).instargramEmbeds) {
+  // Instagram's documented global is `instgrm`. Keep the legacy misspelling
+  // as a compatibility fallback for any older cached embed script.
+  const instagram = (window as any).instgrm ?? (window as any).instargramEmbeds;
+  if (instagramReady && instagram?.Embeds) {
     try {
-      (window as any).instargramEmbeds.process();
-    } catch {
-      /* ignore */
-    }
-  }
-
-  if (facebookReady && (window as any).FB && (window as any).FB.XFBML) {
-    try {
-      (window as any).FB.XFBML.parse();
+      instagram.Embeds.process();
     } catch {
       /* ignore */
     }

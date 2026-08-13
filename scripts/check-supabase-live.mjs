@@ -23,6 +23,8 @@ const checks = [
   ['profiles', 'profiles'],
   ['listings', 'listings'],
   ['ticker', 'ticker_settings'],
+  ['taxonomy nodes', 'taxonomy_nodes'],
+  ['taxonomy attributes', 'taxonomy_attributes'],
 ];
 
 let failures = 0;
@@ -34,6 +36,59 @@ for (const [label, table] of checks) {
   } else {
     console.log(`PASS ${label}`);
   }
+}
+
+// Taxonomy must be present in production. The app ships a client-side fallback
+// for browsing, but the database seed is required for reliable admin, search,
+// bulk-import and future server-side filtering behaviour.
+const { count: categoryCount, error: taxonomyCountError } = await client
+  .from('taxonomy_nodes')
+  .select('id', { count: 'exact', head: true })
+  .eq('level', 'category')
+  .eq('active', true);
+
+if (taxonomyCountError) {
+  failures += 1;
+  console.error(`FAIL taxonomy seed: ${taxonomyCountError.message}`);
+} else if ((categoryCount ?? 0) < 15) {
+  failures += 1;
+  console.error(`FAIL taxonomy seed: expected at least 15 active top-level categories, found ${categoryCount ?? 0}. Run migrations 012 and 013.`);
+} else {
+  console.log(`PASS taxonomy seed (${categoryCount} top-level categories)`);
+}
+
+const requiredTaxonomyNodes = ['veh-ebikes', 'veh-cycle-parts', 'job-trades', 'prp-for-rent', 'hom-furniture', 'ele-mobile-phones', 'family'];
+const { data: requiredNodes, error: requiredNodesError } = await client
+  .from('taxonomy_nodes')
+  .select('id')
+  .in('id', requiredTaxonomyNodes)
+  .eq('active', true);
+
+if (requiredNodesError) {
+  failures += 1;
+  console.error(`FAIL comprehensive taxonomy: ${requiredNodesError.message}`);
+} else {
+  const found = new Set((requiredNodes ?? []).map((node) => node.id));
+  const missing = requiredTaxonomyNodes.filter((id) => !found.has(id));
+  if (missing.length) {
+    failures += 1;
+    console.error(`FAIL comprehensive taxonomy: missing ${missing.join(', ')}. Run 012_vehicle_taxonomy_expansion.sql and 013_comprehensive_classified_taxonomy.sql.`);
+  } else {
+    console.log('PASS comprehensive taxonomy (motors, jobs, property, home, electronics and family)');
+  }
+}
+
+// Provider fields preserve original social URLs. Their absence causes old rows
+// to lose provider identity and fall into a generic card path.
+const { error: providerFieldsError } = await client
+  .from('listings')
+  .select('id, provider, provider_media_id, video_url')
+  .limit(1);
+if (providerFieldsError) {
+  failures += 1;
+  console.error(`FAIL provider media fields: ${providerFieldsError.message}`);
+} else {
+  console.log('PASS provider media fields');
 }
 
 if (failures) {

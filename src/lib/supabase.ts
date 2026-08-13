@@ -1,7 +1,13 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import { Capacitor } from '@capacitor/core';
+import { androidBuildConfig } from '../generated/buildConfig';
 
-const SUPABASE_URL = ((import.meta.env.VITE_SUPABASE_URL as string) || '').trim();
-const ANON_KEY = ((import.meta.env.VITE_SUPABASE_ANON_KEY as string) || '').trim();
+// Android builds get their public Supabase settings from the generated module
+// written by the guarded production build. The Vite values remain the source
+// for normal web deployments.
+const nativeConfig = Capacitor.isNativePlatform() ? androidBuildConfig : null;
+const SUPABASE_URL = ((nativeConfig?.supabaseUrl ?? '') || (import.meta.env.VITE_SUPABASE_URL as string) || '').trim();
+const ANON_KEY = ((nativeConfig?.supabaseAnonKey ?? '') || (import.meta.env.VITE_SUPABASE_ANON_KEY as string) || '').trim();
 
 function configProblem(): string | null {
   if (!SUPABASE_URL || !ANON_KEY) return 'Missing VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY at build time.';
@@ -13,7 +19,7 @@ function configProblem(): string | null {
   } catch {
     return 'VITE_SUPABASE_URL is not a valid URL.';
   }
-  if (ANON_KEY.length < 20 || /your_|placeholder|example/i.test(ANON_KEY)) {
+  if (ANON_KEY.length < 20 || /your_|placeholder|example|test\.signature/i.test(ANON_KEY)) {
     return 'VITE_SUPABASE_ANON_KEY is missing or is still a placeholder.';
   }
   return null;

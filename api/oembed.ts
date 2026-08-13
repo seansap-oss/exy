@@ -97,9 +97,13 @@ export function normalizeUrl(raw: string): Normalized | null {
     const path = parsed.pathname;
     const reel = path.match(/^\/reel\/(\d+)/);
     const videos = path.match(/^\/[^/]+\/videos\/(?:[^/]+\/)?(\d+)/);
+    // Facebook's share drawer produces these short public-link forms. They
+    // have a non-numeric token, so preserve the exact URL for Meta instead of
+    // rejecting it or incorrectly turning it into a /reel/ URL.
+    const share = path.match(/^\/share\/[vr]\/([A-Za-z0-9_-]+)/);
     const watch = parsed.searchParams.get('v');
     const shortLink = host.endsWith('fb.watch') && path.length > 1;
-    const id = reel?.[1] ?? videos?.[1] ?? (watch && /^\d+$/.test(watch) ? watch : null);
+    const id = reel?.[1] ?? videos?.[1] ?? share?.[1] ?? (watch && /^\d+$/.test(watch) ? watch : null);
 
     // fb.watch short links carry no parseable id; pass them through verbatim.
     if (!id && !shortLink) return null;

@@ -14,6 +14,8 @@ import { isSupabaseLive } from '../lib/supabase';
 import { Modal } from './Ui';
 import { IconCheck, IconLock, IconShield, IconUser } from './Icons';
 
+const SHOW_DEMO_SHORTCUTS = import.meta.env.DEV;
+
 type Mode = 'signin' | 'signup' | 'verify';
 
 interface Props {
@@ -88,6 +90,10 @@ export function AuthModal({ open, onClose, onAuth, onPendingProfile, reason }: P
 
   /** Demo-mode one-click entry: signs up, confirms and logs in immediately. */
   async function demoLogin(kind: 'admin' | 'user') {
+    if (!SHOW_DEMO_SHORTCUTS) {
+      setError('Demo shortcuts are unavailable in production. Please sign in with your real account.');
+      return;
+    }
     setError('');
     setBusy(true);
     const email = kind === 'admin' ? 'admin@exy.in' : 'buyer@exy.in';
@@ -362,7 +368,7 @@ export function AuthModal({ open, onClose, onAuth, onPendingProfile, reason }: P
         </button>
       </div>
 
-      {backendReady === false && (
+      {SHOW_DEMO_SHORTCUTS && backendReady === false && (
         <div className="auth-demo">
           <b>Demo shortcuts</b>
           <span>No email needed — these create and activate an account instantly.</span>
@@ -380,7 +386,9 @@ export function AuthModal({ open, onClose, onAuth, onPendingProfile, reason }: P
       <p className="field__hint" style={{ textAlign: 'center', marginTop: 14 }}>
         {isSupabaseLive
           ? 'Secured by Supabase Auth.'
-          : 'Demo mode · any email starting with admin@ gets the Super-Admin role.'}
+          : SHOW_DEMO_SHORTCUTS
+            ? 'Local development demo mode.'
+            : 'Authentication service unavailable.'}
       </p>
     </Modal>
   );

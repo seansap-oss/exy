@@ -1,6 +1,10 @@
 import type { Profile, Session, SignUpInput, UserRole } from '../types';
-import { supabase, isSupabaseLive, SUPABASE_TABLES } from './supabase';
+import { supabase, isSupabaseLive, supabaseConfigProblem, SUPABASE_TABLES } from './supabase';
 import { load, save, uid } from './storage';
+
+// Local accounts are useful for development previews only. A production web
+// build or APK must never silently authenticate against device-local demo data.
+const LOCAL_DEMO_AUTH_ENABLED = import.meta.env.DEV;
 
 const AVATAR_COLORS = ['#f2713a', '#2563eb', '#16a34a', '#7c3aed', '#c08a2e', '#0ea5a4', '#be185d'];
 
@@ -108,7 +112,7 @@ export function blankProfile(input: SignUpInput, index: number): Profile {
 /* Public API                                                                  */
 /* -------------------------------------------------------------------------- */
 export async function signUp(input: SignUpInput): Promise<AuthResult> {
-  const accounts = mockAccounts();
+  const accounts = LOCAL_DEMO_AUTH_ENABLED ? mockAccounts() : [];
   const error = validateSignUp(
     input,
     accounts.map((account) => account.profile.username),
@@ -152,6 +156,10 @@ export async function signUp(input: SignUpInput): Promise<AuthResult> {
           }
         : undefined,
     };
+  }
+
+  if (!LOCAL_DEMO_AUTH_ENABLED) {
+    return { ok: false, error: 'Account creation is unavailable because the production authentication service is not configured.' };
   }
 
   // Local driver — simulate the Supabase email-verification handshake.
@@ -201,6 +209,15 @@ export async function signUpLocal(input: SignUpInput): Promise<AuthResult> {
 export async function signIn(email: string, password: string): Promise<AuthResult> {
   const cleanEmail = email.trim().toLowerCase();
 
+  // Never let a production APK silently authenticate against the local demo
+  // driver. Supabase values are compiled into the APK at build time.
+  if (!isSupabaseLive && !LOCAL_DEMO_AUTH_ENABLED) {
+    return {
+      ok: false,
+      error: `This APK is not connected to production Supabase. Rebuild it after pulling the production environment variables. ${supabaseConfigProblem ?? ''}`.trim(),
+    };
+  }
+
   if (isSupabaseLive && supabase) {
     const { data, error } = await supabase.auth.signInWithPassword({ email: cleanEmail, password });
     if (error) {
@@ -235,6 +252,10 @@ export async function signIn(email: string, password: string): Promise<AuthResul
     };
   }
 
+  if (!LOCAL_DEMO_AUTH_ENABLED) {
+    return { ok: false, error: 'Demo sign-in is unavailable in production. Check the production Supabase configuration.' };
+  }
+
   const accounts = mockAccounts();
   const account = accounts.find((item) => item.profile.email === cleanEmail);
   if (!account) return { ok: false, error: 'No account found with that email.' };
@@ -243,6 +264,38 @@ export async function signIn(email: string, password: string): Promise<AuthResul
     return { ok: false, error: 'Confirm your email address to activate the account.', needsEmailVerification: true, profile: account.profile };
 
   return { ok: true, profile: account.profile, session: newSession(account.profile.id, account.profile.role) };
+}
+
+/**
+ * Hydrates EXY from the current Supabase session on app startup. The cached
+ * local profile is only a first-paint fallback; the database profile is the
+ * authority for role and permissions.
+ */
+export async function loadCurrentProfile(): Promise<AuthResult> {
+  if (!isSupabaseLive || !supabase) return { ok: false, error: 'Supabase is not configured.' };
+  const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+  if (sessionError) return { ok: false, error: sessionError.message };
+  const session = sessionData.session;
+  if (!session?.user) return { ok: false, error: 'No active Supabase session.' };
+
+  const { data: row, error: profileError } = await supabase
+    .from(SUPABASE_TABLES.profiles)
+    .select('*')
+    .eq('id', session.user.id)
+    .maybeSingle();
+  if (profileError) return { ok: false, error: `Your EXY profile could not be loaded: ${profileError.message}` };
+  if (!row) return { ok: false, error: 'No EXY profile exists for the signed-in Supabase account.' };
+
+  return {
+    ok: true,
+    profile: rowToProfile(row),
+    session: {
+      accessToken: session.access_token,
+      refreshToken: session.refresh_token,
+      expiresAt: (session.expires_at ?? 0) * 1000,
+      userId: session.user.id,
+    },
+  };
 }
 
 /**

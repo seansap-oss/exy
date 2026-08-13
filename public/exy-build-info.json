@@ -1,0 +1,7 @@
+{
+  "releaseVersion": "1.5.27",
+  "releaseMarker": "EXY_RELEASE_VERSION:1.5.27",
+  "supabaseHost": "wzhuzaccdwrzsibtzfng.supabase.co",
+  "apiBaseUrl": "https://exy-green.vercel.app",
+  "supabaseStamp": "EXY_ANDROID_PRODUCTION:wzhuzaccdwrzsibtzfng.supabase.co"
+}

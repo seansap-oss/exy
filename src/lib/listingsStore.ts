@@ -1,10 +1,40 @@
-import type { Listing } from '../types';
+import type { Listing, VideoEmbed } from '../types';
 import { supabase, isSupabaseLive } from './supabase';
+import { parseVideoUrl } from './embeds';
 
 const TABLE = 'listings';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 export function rowToListing(row: any): Listing {
+  const storedVideo = row.video && typeof row.video === 'object' ? row.video : null;
+  const videoUrl = String(storedVideo?.url ?? row.video_url ?? '').trim();
+  const parsedVideo = videoUrl ? parseVideoUrl(videoUrl) : null;
+  const provider = storedVideo?.provider ?? row.provider ?? parsedVideo?.provider ?? 'none';
+  const externalId = String(storedVideo?.externalId ?? row.provider_media_id ?? parsedVideo?.externalId ?? '');
+  const video: VideoEmbed | undefined = videoUrl
+    ? {
+        ...(parsedVideo ?? {
+          provider,
+          url: videoUrl,
+          externalId,
+          embedSrc: String(storedVideo?.embedSrc ?? videoUrl),
+        }),
+        ...storedVideo,
+        provider,
+        url: videoUrl,
+        externalId,
+        // Recreate provider sources from the original URL. Facebook must not
+        // restore its legacy plugin iframe from an older JSONB row.
+        embedSrc: String(
+          provider === 'facebook'
+              ? ''
+              : provider === 'instagram'
+                ? (parsedVideo?.embedSrc ?? storedVideo?.embedSrc ?? '')
+              : (storedVideo?.embedSrc ?? parsedVideo?.embedSrc ?? videoUrl),
+        ),
+        poster: storedVideo?.poster ?? row.thumbnail_url ?? parsedVideo?.poster ?? undefined,
+      }
+    : undefined;
   return {
     id: row.id,
     title: row.title ?? '',
@@ -22,17 +52,8 @@ export function rowToListing(row: any): Listing {
     region: row.region === 'global' ? 'global' : 'india',
     city: row.city ?? '',
     sellerId: row.seller_id ?? '',
-    // Prefer the dedicated text columns; fall back to legacy jsonb.
-    video: row.video ??
-      (row.video_url
-        ? {
-            provider: row.provider ?? 'none',
-            url: row.video_url,
-            externalId: row.provider_media_id ?? '',
-            embedSrc: row.video_url,
-            poster: row.thumbnail_url ?? undefined,
-          }
-        : undefined),
+    // Normalize current JSONB rows and older provider-column rows equally.
+    video,
     media: row.media?.length ? row.media : undefined,
     photos: row.photos?.length ? row.photos : ['linear-gradient(135deg,#FFB300,#FF9500)'],
     tier: row.tier ?? 'free',

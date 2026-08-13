@@ -4,10 +4,11 @@ import { keepSharedUrl, recoverSharedUrl, releaseSharedUrl, type SharePayload } 
 import { readLastLocation, rememberText, writeLastLocation } from '../lib/sellerMemory';
 import { HistorySuggest } from './HistorySuggest';
 import { saveListing } from '../lib/publish';
-import { TAXONOMY, subcategoriesOf } from '../data/taxonomy';
+import { subcategoriesOf } from '../data/taxonomy';
 import { parseVideoUrl, providerLabel } from '../lib/embeds';
 import { uid } from '../lib/storage';
 import { IconCheck, IconClose, IconSpark, IconVideo } from './Icons';
+import { TaxonomyPicker, type TaxonomySelection } from './TaxonomyPicker';
 
 interface Props {
   payload: SharePayload | null;
@@ -26,8 +27,12 @@ interface Props {
 export function ExpressPostDrawer({ payload, profile, onClose, onPublish, onNeedAuth }: Props) {
   const [title, setTitle] = useState('');
   const [price, setPrice] = useState('');
-  const [categoryId, setCategoryId] = useState('');
-  const [subCategoryId, setSubCategoryId] = useState('');
+  const [taxonomy, setTaxonomy] = useState<TaxonomySelection>({
+    categoryId: '',
+    subCategoryId: '',
+    typeId: '',
+    attributes: {},
+  });
   const [description, setDescription] = useState('');
   const [url, setUrl] = useState('');
   const [city, setCity] = useState('');
@@ -73,8 +78,6 @@ export function ExpressPostDrawer({ payload, profile, onClose, onPublish, onNeed
   }, [url]);
 
   const video = useMemo(() => parseVideoUrl(url), [url]);
-  const subs = categoryId ? subcategoriesOf(categoryId) : [];
-
   if (!payload) return null;
 
   function publish() {
@@ -82,7 +85,10 @@ export function ExpressPostDrawer({ payload, profile, onClose, onPublish, onNeed
     if (!profile) return onNeedAuth();
     if (!video) return setError('That link is not a recognised Instagram, YouTube, Facebook or TikTok video.');
     if (title.trim().length < 6) return setError('Give the listing a title of at least 6 characters.');
-    if (!categoryId) return setError('Pick a category.');
+    if (!taxonomy.categoryId) return setError('Pick a category.');
+    if (subcategoriesOf(taxonomy.categoryId).length && !taxonomy.subCategoryId) {
+      return setError('Pick a subcategory so this listing appears in the right search results.');
+    }
 
     const listing: Listing = {
       id: uid('lst'),
@@ -90,8 +96,10 @@ export function ExpressPostDrawer({ payload, profile, onClose, onPublish, onNeed
       description: description.trim() || `Shared from ${providerLabel(video.provider)}.`,
       price: Number(price) || 0,
       negotiable: true,
-      categoryId,
-      subCategoryId: subCategoryId || subs[0]?.id || '',
+      categoryId: taxonomy.categoryId,
+      subCategoryId: taxonomy.subCategoryId,
+      typeId: taxonomy.typeId,
+      attributes: taxonomy.attributes,
       tags: [],
       features: [],
       location: city.trim() ? `${city.trim()}, India` : profile.location,
@@ -147,7 +155,7 @@ export function ExpressPostDrawer({ payload, profile, onClose, onPublish, onNeed
           <div style={{ flex: 1 }}>
             <b>Express post</b>
             <span>
-              {video ? `${providerLabel(video.provider)} detected â€” publish in seconds` : 'Shared link received'}
+              {video ? `${providerLabel(video.provider)} detected — publish in seconds` : 'Shared link received'}
             </span>
           </div>
           <button className="icon-btn" onClick={onClose} aria-label="Close">
@@ -191,7 +199,7 @@ export function ExpressPostDrawer({ payload, profile, onClose, onPublish, onNeed
           <div className="form-grid">
             <div className="field">
               <label className="field__label" htmlFor="xp-price">
-                Price (â‚¹)
+                Price (₹)
               </label>
               <input
                 id="xp-price"
@@ -224,44 +232,11 @@ export function ExpressPostDrawer({ payload, profile, onClose, onPublish, onNeed
             </div>
           </div>
 
-          <div className="field">
-            <span className="field__label">Category</span>
-            <div className="chips">
-              {TAXONOMY.map((category) => (
-                <button
-                  key={category.id}
-                  className={`chip chip--sm${categoryId === category.id ? ' is-on' : ''}`}
-                  onClick={() => {
-                    setCategoryId(category.id);
-                    setSubCategoryId('');
-                  }}
-                >
-                  {category.name}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {subs.length > 0 && (
-            <div className="field">
-              <span className="field__label">Subcategory</span>
-              <div className="chips">
-                {subs.map((sub) => (
-                  <button
-                    key={sub.id}
-                    className={`chip chip--sm${subCategoryId === sub.id ? ' is-on' : ''}`}
-                    onClick={() => setSubCategoryId(sub.id)}
-                  >
-                    {sub.name}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
+          <TaxonomyPicker value={taxonomy} onChange={setTaxonomy} idPrefix="express-post" />
 
           <div className="field">
             <label className="field__label" htmlFor="xp-desc">
-              Description <span style={{ color: 'var(--ink-3)', fontWeight: 500 }}>â€” auto-filled from caption</span>
+              Description <span style={{ color: 'var(--ink-3)', fontWeight: 500 }}>— auto-filled from caption</span>
             </label>
             <textarea
               id="xp-desc"

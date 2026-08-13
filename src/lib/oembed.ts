@@ -1,4 +1,5 @@
 import type { VideoProvider } from '../types';
+import { androidBuildConfig } from '../generated/buildConfig';
 
 /**
  * Client for the server-side Meta oEmbed proxy (`/api/oembed`).
@@ -30,6 +31,13 @@ export function usesOEmbedProxy(provider: VideoProvider): boolean {
 const memory = new Map<string, OEmbedResult | null>();
 const inflight = new Map<string, Promise<OEmbedResult | null>>();
 
+/** Capacitor has no local `/api` server, so Android needs Vercel's origin. */
+function oembedEndpoint(url: string): string {
+  const configured = androidBuildConfig.apiBaseUrl.trim();
+  const base = configured ? configured.replace(/\/+$/, '') : '';
+  return `${base}/api/oembed?url=${encodeURIComponent(url)}`;
+}
+
 /** Session cache so a scrolling feed never refetches the same post. */
 export function peekCached(url: string): OEmbedResult | null | undefined {
   return memory.get(url);
@@ -46,7 +54,7 @@ export async function fetchOEmbed(url: string, signal?: AbortSignal): Promise<OE
 
   const request = (async (): Promise<OEmbedResult | null> => {
     try {
-      const response = await fetch(`/api/oembed?url=${encodeURIComponent(url)}`, {
+      const response = await fetch(oembedEndpoint(url), {
         signal,
         headers: { Accept: 'application/json' },
       });

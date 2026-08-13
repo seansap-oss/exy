@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Listing, Seller } from '../types';
 import { providerAllow, providerLabel } from '../lib/embeds';
 import { fallbackGradient, listingCandidates } from '../lib/thumbnails';
-import { openOriginal, providerActionLabel, resolvePlayback } from '../lib/playback';
+import { handoffToProvider, providerActionLabel, resolvePlayback } from '../lib/playback';
 import { VideoEmbed } from './VideoEmbed';
 import { MediaPreview } from './MediaPreview';
 import { inr } from '../lib/format';
@@ -291,14 +291,14 @@ function FeedCard({
                 else onStart();
                 return;
               }
-              // Instagram / Facebook → immersive player mounts the official
-              // embed and always offers the original link.
+              // Instagram and Facebook open the immersive EXY player. Instagram
+              // may use the official embed; Facebook is always a clean hand-off.
               if (playback.kind === 'embed') {
                 onExpand();
                 return;
               }
               // No embeddable form → hand off to the provider.
-              if (!openOriginal(playback.original)) {
+              if (!handoffToProvider(playback.provider, playback.original)) {
                 onDeadMedia?.('Could not open the original link.');
               }
             }}
@@ -312,6 +312,10 @@ function FeedCard({
               provider={listing.video?.provider}
               oembedUrl={listing.video?.url ?? null}
               alt={listing.title}
+              title={listing.title}
+              meta={`${inr(listing.price)} · ${listing.city}`}
+              sellerName={seller?.name}
+              price={inr(listing.price)}
               className="mp--fill"
             />
             {playback.playable ? (
@@ -401,16 +405,8 @@ export function FullscreenPlayer({ listing, onClose }: { listing: Listing; onClo
       <div className="fs-player__frame">
         {nativeVideo ? (
             <video src={nativeVideo.src} poster={nativeVideo.poster} muted autoPlay loop playsInline controls />
-        ) : playback.kind === 'inline' && playback.src ? (
-          <iframe
-            src={`${playback.src}${playback.src.includes('?') ? '&' : '?'}autoplay=1&mute=1&controls=1&playsinline=1&rel=0`}
-            title={listing.title}
-            allow={providerAllow(listing.video?.provider ?? 'youtube')}
-            allowFullScreen
-          />
-        ) : playback.kind === 'embed' && listing.video ? (
-          // Official IG / FB embed, mounted by their own script.
-          <VideoEmbed video={listing.video} title={listing.title} orientation="vertical" autoStart />
+        ) : listing.video ? (
+          <VideoEmbed video={listing.video} title={listing.title} orientation="vertical" autoStart hideOpenOriginal />
         ) : (
           <div style={{ position: 'absolute', inset: 0, background: listing.photos[0] }} />
         )}
@@ -419,7 +415,7 @@ export function FullscreenPlayer({ listing, onClose }: { listing: Listing; onClo
         {playback.original && playback.kind !== 'inline' && (
           <button
             className="fs-player__open"
-            onClick={() => openOriginal(playback.original)}
+            onClick={() => handoffToProvider(playback.provider, playback.original)}
           >
             {providerActionLabel(playback.provider)}
           </button>

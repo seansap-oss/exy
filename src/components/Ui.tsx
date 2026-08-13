@@ -136,6 +136,8 @@ export function ListingCard({ listing, seller, saved, onOpen, onToggleSave }: Ca
           provider={listing.video?.provider}
           oembedUrl={listing.video?.url ?? null}
           alt={listing.title}
+          title={listing.title}
+          meta={`${inr(listing.price)} · ${listing.city}`}
           className="card__media-fill"
         />
         <span className="card__badges">

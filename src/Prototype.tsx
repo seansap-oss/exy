@@ -20,12 +20,12 @@ import type {
 import { CATEGORIES } from './data/categories';
 import { SELLERS } from './data/sellers';
 import { LISTINGS } from './data/listings';
-import { PACKAGES, TIER_LIMITS, tierExpiry, type PaymentResult } from './lib/payments';
+import { PACKAGES, limitLabel, limitsForProfile, tierExpiry, type PaymentResult } from './lib/payments';
 import { compact, inr, maskPhone, timeAgo } from './lib/format';
 import { load, save, uid } from './lib/storage';
 import { applyFilters, EMPTY_FILTERS } from './lib/search';
 import { fetchTicker, persistTicker, readTickerLocal, subscribeTicker } from './lib/tickerStore';
-import { allLocalProfiles, persistProfile, profileToSeller, signOut as authSignOut } from './lib/auth';
+import { allLocalProfiles, loadCurrentProfile, persistProfile, profileToSeller, signOut as authSignOut } from './lib/auth';
 import { isUrgent, track, urgencyText, VIEW_DWELL_SECONDS } from './lib/analytics';
 import {
   autoReply,
@@ -39,17 +39,18 @@ import {
   writeMessages,
   writeThreads,
 } from './lib/messaging';
-import { isSupabaseLive } from './lib/supabase';
+import { isSupabaseLive, supabase } from './lib/supabase';
+import { androidBuildConfig } from './generated/buildConfig';
 import { providerLabel } from './lib/embeds';
 import { useAndroidBack } from './hooks/useAndroidBack';
 import {
   dedupeListings,
   fetchListings,
   patchListing,
-  publishListing,
   removeListing,
   subscribeListings,
 } from './lib/listingsStore';
+import { saveListing } from './lib/publish';
 import { syncHistoryFromRemote } from './lib/sellerMemory';
 import { TickerTape } from './components/TickerTape';
 import { SearchModal } from './components/SearchModal';
@@ -108,6 +109,8 @@ import {
   IconWallet,
 } from './components/Icons';
 
+const RELEASE_VERSION = androidBuildConfig.releaseVersion || '1.5.18';
+
 export default function Prototype() {
   /* ------------------------------ persisted state ------------------------------ */
   const [theme, setTheme] = useState<ThemeMode>(() => load<ThemeMode>('theme', 'gold'));
@@ -115,7 +118,12 @@ export default function Prototype() {
   const [, setSession] = useState<Session | null>(() => load<Session | null>('session', null));
   const [profiles, setProfiles] = useState<Profile[]>(() => load<Profile[]>('profiles', []));
   const [saved, setSaved] = useState<string[]>(() => load<string[]>('saved', []));
-  const [categories, setCategories] = useState<Category[]>(() => load<Category[]>('categories', CATEGORIES));
+  // Categories are product taxonomy, not user content. Older app versions
+  // cached a previous category list in localStorage, which made Browse/Search
+  // appear out of date even after a new web or Android build. Always start
+  // from the shared canonical taxonomy; this preserves the existing UI while
+  // keeping every surface aligned.
+  const [categories, setCategories] = useState<Category[]>(CATEGORIES);
   const [sellers, setSellers] = useState<Seller[]>(() => load<Seller[]>('sellers', SELLERS));
   // Seed data is a first-paint placeholder only when Supabase is unavailable.
   // Once configured, reloadListings() replaces this with authoritative rows.
@@ -161,6 +169,60 @@ export default function Prototype() {
   useEffect(() => writeThreads(threads), [threads]);
   useEffect(() => writeMessages(messages), [messages]);
   useEffect(() => save('events', events), [events]);
+
+  // Supabase is authoritative for the active account and role. A cached
+  // local profile may be stale after an admin grant, account switch, or
+  // logout, so refresh it before exposing protected UI or issuing writes.
+  useEffect(() => {
+    if (!isSupabaseLive || !supabase) return;
+    let disposed = false;
+
+    const hydrate = async () => {
+      const result = await loadCurrentProfile();
+      if (disposed) return;
+      if (result.ok && result.profile && result.session) {
+        setProfile(result.profile);
+        setSession(result.session);
+        save('profile', result.profile);
+        save('session', result.session);
+        setProfiles((prev) => (prev.some((item) => item.id === result.profile!.id)
+          ? prev.map((item) => (item.id === result.profile!.id ? result.profile! : item))
+          : [result.profile!, ...prev]));
+        setSellers((prev) => (prev.some((seller) => seller.id === result.profile!.id)
+          ? prev.map((seller) => (seller.id === result.profile!.id ? profileToSeller(result.profile!) : seller))
+          : [profileToSeller(result.profile!), ...prev]));
+        return;
+      }
+
+      // A configured Supabase app with no live session must not continue
+      // showing a cached admin/user profile from another session.
+      if (/No active Supabase session/i.test(result.error ?? '')) {
+        setProfile(null);
+        setSession(null);
+        setLocalAdminUnlocked(false);
+        save('profile', null);
+        save('session', null);
+      }
+    };
+
+    void hydrate();
+    const { data } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') {
+        window.setTimeout(() => void hydrate(), 0);
+      }
+      if (event === 'SIGNED_OUT' && !disposed) {
+        setProfile(null);
+        setSession(null);
+        setLocalAdminUnlocked(false);
+        save('profile', null);
+        save('session', null);
+      }
+    });
+    return () => {
+      disposed = true;
+      data.subscription.unsubscribe();
+    };
+  }, []);
 
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -553,19 +615,26 @@ export default function Prototype() {
   );
 
   const onPublish = useCallback(
-    (listing: Listing) => {
-      // Optimistic insert so the UI stays responsive.
-      setListings((prev) => dedupeListings([listing, ...prev]));
-      go({ name: 'profile', tab: 'ads' });
+    (listing: Listing, alreadyPersisted = false) => {
+      const complete = (savedListing: Listing, id: string | null) => {
+        // Mirror only after Supabase has confirmed the row. This prevents a
+        // failed mobile/web write from looking like a successful local post.
+        setListings((prev) => dedupeListings([{ ...savedListing, id: id ?? savedListing.id }, ...prev]));
+        go({ name: 'profile', tab: 'ads' });
+        toast(id ? 'Listing published and live' : 'Listing published', 'ok');
+        void reloadListings();
+      };
 
-      void publishListing(listing).then(({ ok, id, error }) => {
-        if (ok) {
-          toast(id ? 'Listing published and live' : 'Listing published', 'ok');
-          void reloadListings();
+      if (alreadyPersisted) {
+        complete(listing, listing.id);
+        return;
+      }
+
+      void saveListing(listing, true).then((result) => {
+        if (result.ok) {
+          complete(listing, result.id);
         } else {
-          // Never claim success on a failed write.
-          setListings((prev) => prev.filter((item) => item.id !== listing.id));
-          toast(`Publish failed: ${error ?? 'unknown error'}`, 'err');
+          toast(`Publish failed: ${result.error ?? 'unknown error'}`, 'err');
         }
       });
     },
@@ -830,12 +899,12 @@ export default function Prototype() {
               <Empty
                 icon={<IconLock size={28} />}
                 title="Super-Admin access required"
-                message="Sign in with an admin@ email address to open the EXY operations portal."
+                message="Sign in with the account that was granted the admin role in Supabase to open the EXY operations portal."
                 action={
                   <button
                     className="btn btn--primary"
                     onClick={() => {
-                      setAuthReason('Admin portal requires an admin@ account.');
+                      setAuthReason('Admin portal requires a Supabase account with the admin role.');
                       setAuthOpen(true);
                     }}
                   >
@@ -948,9 +1017,10 @@ export default function Prototype() {
           clearShareParams();
         }}
         onPublish={(listing) => {
-          onPublish(listing);
+          // ExpressPostDrawer already wrote and confirmed this row through
+          // saveListing(); do not insert it a second time.
+          onPublish(listing, true);
           clearShareParams();
-          toast('Published from shared reel', 'ok');
         }}
         onNeedAuth={() => {
           setAuthReason('Sign in to publish the reel you shared.');
@@ -2078,7 +2148,7 @@ function ProfileView({
     }),
     { views: 0, saves: 0, clicks: 0, leads: 0, today: 0 },
   );
-  const limits = TIER_LIMITS[profile.tier];
+  const limits = limitsForProfile(profile);
   const myThreads = threads.filter((thread) => thread.sellerId === profile.id).length;
 
   const tabs: Array<{ id: typeof tab; label: string; icon: React.ReactNode }> = [
@@ -2175,7 +2245,7 @@ function ProfileView({
           <>
             <div className="toolbar">
               <span className="badge badge--soft">
-                {myListings.filter((l) => l.status === 'active').length}/{limits.ads} active ad slots used
+                {myListings.filter((l) => l.status === 'active').length}/{limitLabel(limits.ads)} active ad slots used
               </span>
               <span className="toolbar__spacer" />
               <button className="btn btn--primary btn--sm" onClick={onSell}>
@@ -2294,7 +2364,7 @@ function ProfileView({
               <div className="stat-tile">
                 <span>Active ads</span>
                 <b>{myListings.filter((l) => l.status === 'active').length}</b>
-                <em>of {limits.ads} allowed</em>
+                <em>{limitLabel(limits.ads)} active ads allowed</em>
               </div>
               <div className="stat-tile">
                 <span>Today's views</span>
@@ -2441,7 +2511,7 @@ function ProfileView({
                 Project: {isSupabaseLive ? new URL(import.meta.env.VITE_SUPABASE_URL as string).host : '—'}<br />
                 Signed in: {profile ? 'yes' : 'no'}<br />
                 Role: {profile?.role ?? '—'}<br />
-                v1.5.7
+                v{RELEASE_VERSION}
               </div>
               <button className="btn btn--danger" onClick={onSignOut} style={{ marginTop: 12 }}>
                 Log out
@@ -2538,7 +2608,7 @@ function Footer({
         </div>
 
         <div className="footer__bottom">
-          <span>© {new Date().getFullYear()} EXY Classifieds. Built for India. <small className="app-version">v1.5.7</small></span>
+          <span>© {new Date().getFullYear()} EXY Classifieds. Built for global use. <small className="app-version">v{RELEASE_VERSION}</small></span>
           <span>Instagram · YouTube Shorts · Facebook Reels · TikTok indexing</span>
         </div>
         <button

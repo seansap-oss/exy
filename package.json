@@ -1,7 +1,7 @@
 {
   "name": "exy",
   "private": true,
-  "version": "1.5.7",
+  "version": "1.5.29",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -10,7 +10,11 @@
     "backend:check": "node scripts/check-supabase-live.mjs",
     "build:release": "npm run env:check && npm run build",
     "verify:release": "npm run env:check && oxlint src api && tsc -b && vite build",
-    "android:prepare": "npm run build:release && npx cap copy android",
+    "android:prepare": "npm run android:prepare:production",
+    "android:prepare:production": "node scripts/build-android-production.mjs",
+    "android:apk": "node scripts/build-android-apk.mjs",
+    "verify:social-player": "node scripts/verify-social-player.mjs",
+    "verify:production-auth": "node scripts/verify-production-auth.mjs",
     "lint": "oxlint",
     "preview": "vite preview",
     "build:watch": "node scripts/build-watch.mjs",

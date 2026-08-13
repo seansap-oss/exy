@@ -8,15 +8,17 @@ const YT_PATTERNS = [
 ];
 
 const IG_PATTERNS = [
-  /instagram\.com\/reels?\/([A-Za-z0-9_-]+)/i,
-  /instagram\.com\/p\/([A-Za-z0-9_-]+)/i,
-  /instagram\.com\/tv\/([A-Za-z0-9_-]+)/i,
+  /instagram\.com\/(reels?)\/([A-Za-z0-9_-]+)/i,
+  /instagram\.com\/(p)\/([A-Za-z0-9_-]+)/i,
+  /instagram\.com\/(tv)\/([A-Za-z0-9_-]+)/i,
 ];
 
 const FB_PATTERNS = [
   /facebook\.com\/reel\/(\d+)/i,
   /facebook\.com\/[^/]+\/videos\/(\d+)/i,
   /facebook\.com\/watch\/?\?v=(\d+)/i,
+  /facebook\.com\/share\/v\/([A-Za-z0-9_-]+)/i,
+  /facebook\.com\/share\/r\/([A-Za-z0-9_-]+)/i,
   /fb\.watch\/([A-Za-z0-9_-]+)/i,
 ];
 
@@ -26,6 +28,20 @@ function match(url: string, patterns: RegExp[]): string | null {
   for (const pattern of patterns) {
     const found = url.match(pattern);
     if (found?.[1]) return found[1];
+  }
+  return null;
+}
+
+/** Keeps the published Instagram route intact. A Reel cannot be embedded as
+ * a normal `/p/` post: Meta returns its localised "unavailable" page. */
+function instagramEmbedPath(url: string): { id: string; path: 'reel' | 'p' | 'tv' } | null {
+  for (const pattern of IG_PATTERNS) {
+    const found = url.match(pattern);
+    if (!found) continue;
+    const path = found[1].toLowerCase();
+    const id = found[2];
+    if (!id) continue;
+    return { id, path: path === 'reels' || path === 'reel' ? 'reel' : path as 'p' | 'tv' };
   }
   return null;
 }
@@ -41,7 +57,7 @@ export function detectProvider(url: string): VideoProvider {
 }
 
 /**
- * Parses any supported social video URL into a renderable iframe descriptor.
+ * Parses any supported social video URL into a playback descriptor.
  * Returns null when the URL cannot be resolved to a known embed.
  */
 export function parseVideoUrl(rawUrl: string, autoplay = false): VideoEmbed | null {
@@ -62,24 +78,28 @@ export function parseVideoUrl(rawUrl: string, autoplay = false): VideoEmbed | nu
   }
 
   if (provider === 'instagram') {
-    const id = match(url, IG_PATTERNS);
-    if (!id) return null;
+    const parsed = instagramEmbedPath(url);
+    if (!parsed) return null;
     return {
       provider,
       url,
-      externalId: id,
-      embedSrc: `https://www.instagram.com/p/${id}/embed/`,
+      externalId: parsed.id,
+      // Use the exact content route. Reels and feed posts have different
+      // official embed endpoints; converting every URL to /p/ breaks Reels.
+      embedSrc: `https://www.instagram.com/${parsed.path}/${parsed.id}/embed/`,
     };
   }
 
   if (provider === 'facebook') {
     const id = match(url, FB_PATTERNS);
-    const target = id && /^\d+$/.test(id) ? `https://www.facebook.com/reel/${id}` : url;
     return {
       provider,
       url,
       externalId: id ?? url,
-      embedSrc: `https://www.facebook.com/plugins/video.php?href=${encodeURIComponent(target)}&show_text=false&autoplay=${autoplay ? 'true' : 'false'}`,
+      // Facebook's iframe/plugin frequently renders a provider-controlled,
+      // localised error document inside Android WebView. Keep the public URL
+      // as the source of truth and hand off to Facebook instead of embedding.
+      embedSrc: '',
     };
   }
 

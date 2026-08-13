@@ -29,7 +29,9 @@ import {
 } from '../lib/ticker';
 import { TickerTape, TickerStack } from './TickerTape';
 import { MediaUploader } from './MediaUploader';
+import { VideoEmbed } from './VideoEmbed';
 import { BulkImport } from './BulkImport';
+import { TaxonomyPicker, type TaxonomySelection } from './TaxonomyPicker';
 import { Switch } from './Ui';
 import {
   IconBadge,
@@ -51,6 +53,7 @@ import {
   IconVideo,
   IconWallet,
 } from './Icons';
+import { TAXONOMY, subcategoriesOf } from '../data/taxonomy';
 
 type AdminTab = 'ticker' | 'linker' | 'bulk' | 'uploader' | 'sellers' | 'cloner' | 'dealers' | 'listings' | 'metrics';
 
@@ -122,7 +125,6 @@ export function AdminPanel(props: Props) {
           )}
           {tab === 'linker' && (
             <VisualSeeder
-              categories={props.categories}
               sellers={props.sellers}
               listings={props.listings}
               onListings={props.onListings}
@@ -139,7 +141,6 @@ export function AdminPanel(props: Props) {
           )}
           {tab === 'uploader' && (
             <NativeUploaderPanel
-              categories={props.categories}
               sellers={props.sellers}
               listings={props.listings}
               onListings={props.onListings}
@@ -800,13 +801,11 @@ function TickerManager({
 /* Module 2.1 — Visual Database Seeder (Linker)                                */
 /* ========================================================================== */
 function VisualSeeder({
-  categories,
   sellers,
   listings,
   onListings,
   onToast,
 }: {
-  categories: Category[];
   sellers: Seller[];
   listings: Listing[];
   onListings: (listings: Listing[]) => void;
@@ -815,8 +814,10 @@ function VisualSeeder({
   const [form, setForm] = useState({
     title: '',
     price: '',
-    categoryId: categories[0]?.id ?? '',
-    subCategoryId: categories[0]?.children[0]?.id ?? '',
+    categoryId: TAXONOMY[0]?.id ?? '',
+    subCategoryId: TAXONOMY[0]?.children?.[0]?.id ?? '',
+    typeId: '',
+    attributes: {} as Record<string, string>,
     sellerId: sellers[0]?.id ?? '',
     city: '',
     location: '',
@@ -828,9 +829,10 @@ function VisualSeeder({
     featured: true,
   });
   const [bulk, setBulk] = useState('');
+  const [bulkBusy, setBulkBusy] = useState(false);
   const [error, setError] = useState('');
 
-  const subs = categories.find((c) => c.id === form.categoryId)?.children ?? [];
+  const subs = subcategoriesOf(form.categoryId);
   const resolved = useMemo(() => {
     for (const url of [form.instagram, form.youtube, form.facebook]) {
       const parsed = parseVideoUrl(url);
@@ -856,6 +858,8 @@ function VisualSeeder({
       negotiable: true,
       categoryId: form.categoryId,
       subCategoryId: form.subCategoryId || subs[0]?.id || '',
+      typeId: form.typeId || undefined,
+      attributes: Object.keys(form.attributes).length ? form.attributes : undefined,
       tags: [],
       features: [],
       location: form.location.trim() || seller?.location || 'India',
@@ -884,7 +888,7 @@ function VisualSeeder({
         onToast(`${publishLive ? 'Publish' : 'Save'} failed: ${result.error}`, 'err');
         return;
       }
-      if (publishLive) onListings([listing, ...listings]);
+      if (publishLive) onListings([{ ...listing, id: result.id ?? listing.id }, ...listings]);
       onToast(
         publishLive
           ? `Published live (${result.operation}) — id ${result.id}`
@@ -895,44 +899,70 @@ function VisualSeeder({
     });
   }
 
-  function bulkSeed() {
+  async function bulkSeed() {
+    if (bulkBusy) return;
     const urls = bulk.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
     const parsed = urls.map((url) => parseVideoUrl(url)).filter(Boolean);
     if (!parsed.length) return onToast('No valid video URLs found in the batch.', 'err');
 
     const seller = sellers.find((s) => s.id === form.sellerId);
-    const created: Listing[] = parsed.map((video, index) => ({
-      id: uid('lst'),
-      title: `${providerLabel(video!.provider)} import #${index + 1} — ${video!.externalId}`,
-      description: 'Bulk-imported reel awaiting editorial review.',
-      price: 0,
-      negotiable: true,
-      categoryId: form.categoryId,
-      subCategoryId: form.subCategoryId || subs[0]?.id || '',
-      tags: [],
-      features: [],
-      location: seller?.location ?? 'India',
-      region: 'india',
-      city: seller?.location.split(',')[0] ?? 'India',
-      sellerId: form.sellerId,
-      video: video!,
-      photos: ['linear-gradient(135deg,#cbd5e1,#334155)'],
-      tier: 'standard',
-      featured: false,
-      condition: 'new',
-      createdAt: new Date().toISOString(),
-      viewCount: 0,
-      saveCount: 0,
-      clickCount: 0,
-      leadCount: 0,
-      todayViews: 0,
-      hidePhone: seller?.hidePhone ?? false,
-      status: 'active',
-    }));
+    setBulkBusy(true);
+    const created: Listing[] = [];
+    let failed = 0;
 
-    onListings([...created, ...listings]);
-    onToast(`Bulk-imported ${created.length} reels`, 'ok');
-    setBulk('');
+    try {
+      // Keep this sequential: each successful row is confirmed by Supabase
+      // before it is mirrored locally, so the admin page, website and APK all
+      // share the same durable records and retries cannot create phantom cards.
+      for (const [index, video] of parsed.entries()) {
+        if (!video) continue;
+        const listing: Listing = {
+          id: uid('lst'),
+          title: `${providerLabel(video.provider)} import #${index + 1} — ${video.externalId}`,
+          description: 'Bulk-imported reel awaiting editorial review.',
+          price: 0,
+          negotiable: true,
+          categoryId: form.categoryId,
+          subCategoryId: form.subCategoryId || subs[0]?.id || '',
+          typeId: form.typeId || undefined,
+          attributes: Object.keys(form.attributes).length ? form.attributes : undefined,
+          tags: [],
+          features: [],
+          location: seller?.location ?? 'India',
+          region: 'india',
+          city: seller?.location.split(',')[0] ?? 'India',
+          sellerId: form.sellerId,
+          video,
+          photos: ['linear-gradient(135deg,#cbd5e1,#334155)'],
+          tier: 'standard',
+          featured: false,
+          condition: 'new',
+          createdAt: new Date().toISOString(),
+          viewCount: 0,
+          saveCount: 0,
+          clickCount: 0,
+          leadCount: 0,
+          todayViews: 0,
+          hidePhone: seller?.hidePhone ?? false,
+          status: 'active',
+        };
+        const result = await saveListing(listing, true);
+        if (result.ok) {
+          created.push({ ...listing, id: result.id ?? listing.id });
+        } else {
+          failed += 1;
+        }
+      }
+    } finally {
+      setBulkBusy(false);
+    }
+
+    if (created.length) onListings([...created, ...listings]);
+    onToast(
+      `${created.length} reels published${failed ? `, ${failed} failed` : ''}.`,
+      failed ? 'err' : 'ok',
+    );
+    if (!failed) setBulk('');
   }
 
   return (
@@ -980,47 +1010,19 @@ function VisualSeeder({
           </div>
         </div>
 
+        <TaxonomyPicker
+          value={{
+            categoryId: form.categoryId,
+            subCategoryId: form.subCategoryId,
+            typeId: form.typeId,
+            attributes: form.attributes,
+          }}
+          onChange={(next: TaxonomySelection) => setForm((prev) => ({ ...prev, ...next }))}
+          variant="compact"
+          idPrefix="vs-tax"
+        />
+
         <div className="form-grid form-grid--3">
-          <div className="field">
-            <label className="field__label" htmlFor="vs-cat">
-              Category
-            </label>
-            <select
-              id="vs-cat"
-              className="select"
-              value={form.categoryId}
-              onChange={(event) =>
-                setForm((prev) => ({
-                  ...prev,
-                  categoryId: event.target.value,
-                  subCategoryId: categories.find((c) => c.id === event.target.value)?.children[0]?.id ?? '',
-                }))
-              }
-            >
-              {categories.map((category) => (
-                <option key={category.id} value={category.id}>
-                  {category.name}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="field">
-            <label className="field__label" htmlFor="vs-sub">
-              Subcategory
-            </label>
-            <select
-              id="vs-sub"
-              className="select"
-              value={form.subCategoryId}
-              onChange={(event) => set('subCategoryId', event.target.value)}
-            >
-              {subs.map((sub) => (
-                <option key={sub.id} value={sub.id}>
-                  {sub.name}
-                </option>
-              ))}
-            </select>
-          </div>
           <div className="field">
             <label className="field__label" htmlFor="vs-seller">
               Seller profile
@@ -1142,9 +1144,12 @@ function VisualSeeder({
 
         {resolved && (
           <div style={{ maxWidth: 250, marginBottom: 16 }}>
-            <div className="video video--vertical">
-              <iframe src={resolved.embedSrc} title="Embed preview" loading="lazy" allowFullScreen />
-            </div>
+            <VideoEmbed
+              video={{ ...resolved, poster: form.poster.trim() || resolved.poster }}
+              fallback="linear-gradient(160deg,#1a1711,#090909)"
+              title="Embed preview"
+              orientation="vertical"
+            />
           </div>
         )}
 
@@ -1186,8 +1191,8 @@ function VisualSeeder({
             placeholder={'https://www.youtube.com/shorts/abc123\nhttps://www.instagram.com/reel/CxYz12AbCdE/'}
           />
         </div>
-        <button className="btn btn--soft" onClick={bulkSeed}>
-          Import batch
+        <button className="btn btn--soft" onClick={() => void bulkSeed()} disabled={bulkBusy}>
+          {bulkBusy ? 'Importing…' : 'Import batch'}
         </button>
       </div>
     </>
@@ -1198,13 +1203,11 @@ function VisualSeeder({
 /* Module 2.2 — Native Content Uploader                                        */
 /* ========================================================================== */
 function NativeUploaderPanel({
-  categories,
   sellers,
   listings,
   onListings,
   onToast,
 }: {
-  categories: Category[];
   sellers: Seller[];
   listings: Listing[];
   onListings: (listings: Listing[]) => void;
@@ -1212,15 +1215,17 @@ function NativeUploaderPanel({
 }) {
   const [title, setTitle] = useState('');
   const [price, setPrice] = useState('');
-  const [categoryId, setCategoryId] = useState(categories[0]?.id ?? '');
-  const [subCategoryId, setSubCategoryId] = useState(categories[0]?.children[0]?.id ?? '');
+  const [categoryId, setCategoryId] = useState(TAXONOMY[0]?.id ?? '');
+  const [subCategoryId, setSubCategoryId] = useState(TAXONOMY[0]?.children?.[0]?.id ?? '');
+  const [typeId, setTypeId] = useState('');
+  const [attributes, setAttributes] = useState<Record<string, string>>({});
   const [sellerId, setSellerId] = useState(sellers[0]?.id ?? '');
   const [videos, setVideos] = useState<NativeMedia[]>([]);
   const [images, setImages] = useState<NativeMedia[]>([]);
   const [audio, setAudio] = useState<NativeMedia[]>([]);
   const [error, setError] = useState('');
 
-  const subs = categories.find((c) => c.id === categoryId)?.children ?? [];
+  const subs = subcategoriesOf(categoryId);
   const media = [...videos, ...images, ...audio];
 
   function publish() {
@@ -1239,6 +1244,8 @@ function NativeUploaderPanel({
       negotiable: true,
       categoryId,
       subCategoryId: subCategoryId || subs[0]?.id || '',
+      typeId: typeId || undefined,
+      attributes: Object.keys(attributes).length ? attributes : undefined,
       tags: [],
       features: [],
       location: seller?.location ?? 'India',
@@ -1282,7 +1289,7 @@ function NativeUploaderPanel({
         onToast(`Publish failed: ${result.error}`, 'err');
         return;
       }
-      onListings([listing, ...listings]);
+      onListings([{ ...listing, id: result.id ?? listing.id }, ...listings]);
       onToast(`Published live (${result.operation}) with ${media.length} hosted file(s)`, 'ok');
       setTitle('');
       setPrice('');
@@ -1333,44 +1340,18 @@ function NativeUploaderPanel({
             />
           </div>
         </div>
+        <TaxonomyPicker
+          value={{ categoryId, subCategoryId, typeId, attributes }}
+          onChange={(next: TaxonomySelection) => {
+            setCategoryId(next.categoryId);
+            setSubCategoryId(next.subCategoryId);
+            setTypeId(next.typeId);
+            setAttributes(next.attributes);
+          }}
+          idPrefix="nu-tax"
+        />
+
         <div className="form-grid form-grid--3">
-          <div className="field">
-            <label className="field__label" htmlFor="nu-cat">
-              Category
-            </label>
-            <select
-              id="nu-cat"
-              className="select"
-              value={categoryId}
-              onChange={(event) => {
-                setCategoryId(event.target.value);
-                setSubCategoryId(categories.find((c) => c.id === event.target.value)?.children[0]?.id ?? '');
-              }}
-            >
-              {categories.map((category) => (
-                <option key={category.id} value={category.id}>
-                  {category.name}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="field">
-            <label className="field__label" htmlFor="nu-sub">
-              Subcategory
-            </label>
-            <select
-              id="nu-sub"
-              className="select"
-              value={subCategoryId}
-              onChange={(event) => setSubCategoryId(event.target.value)}
-            >
-              {subs.map((sub) => (
-                <option key={sub.id} value={sub.id}>
-                  {sub.name}
-                </option>
-              ))}
-            </select>
-          </div>
           <div className="field">
             <label className="field__label" htmlFor="nu-seller">
               Seller
@@ -1390,19 +1371,19 @@ function NativeUploaderPanel({
         <div className="panel__title">
           <IconFilm size={15} /> MP4 video — auto 480p compression
         </div>
-        <MediaUploader kind="video" items={videos} onChange={setVideos} max={3} onError={(msg) => onToast(msg, 'err')} />
+        <MediaUploader kind="video" items={videos} onChange={setVideos} max={9999} onError={(msg) => onToast(msg, 'err')} />
       </div>
 
       <div className="panel">
         <div className="panel__title">
           <IconUpload size={15} /> JPG / PNG images
         </div>
-        <MediaUploader kind="image" items={images} onChange={setImages} max={8} onError={(msg) => onToast(msg, 'err')} />
+        <MediaUploader kind="image" items={images} onChange={setImages} max={9999} onError={(msg) => onToast(msg, 'err')} />
       </div>
 
       <div className="panel">
         <div className="panel__title">Audio banner — MP3 + still poster</div>
-        <MediaUploader kind="audio" items={audio} onChange={setAudio} max={2} onError={(msg) => onToast(msg, 'err')} />
+        <MediaUploader kind="audio" items={audio} onChange={setAudio} max={9999} onError={(msg) => onToast(msg, 'err')} />
         {audio.length > 0 && (
           <div className="audio-banner" style={images[0] ? { backgroundImage: `url(${images[0].src})` } : undefined}>
             <div className="audio-banner__body">

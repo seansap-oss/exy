@@ -27,7 +27,7 @@ if (!url || !key) {
   } catch {
     problem = 'VITE_SUPABASE_URL is invalid.';
   }
-  if (!problem && (key.length < 20 || /your_|placeholder|example/i.test(key))) {
+  if (!problem && (key.length < 20 || /your_|placeholder|example|test\.signature/i.test(key))) {
     problem = 'VITE_SUPABASE_ANON_KEY is missing or still a placeholder.';
   }
 }

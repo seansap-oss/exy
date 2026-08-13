@@ -1,5 +1,6 @@
 import type { Listing, SearchFilters, Seller } from '../types';
 import { CATEGORY_MAP } from '../data/categories';
+import { breadcrumb, nodeName, TAX_MAP, typesOf } from '../data/taxonomy';
 
 export const EMPTY_FILTERS: SearchFilters = {
   keyword: '',
@@ -33,14 +34,26 @@ export function applyFilters(
 
     if (terms.length) {
       const seller = sellerMap[listing.sellerId];
-      const category = CATEGORY_MAP[listing.categoryId];
+      const taxonomyPath = breadcrumb(listing.categoryId, listing.subCategoryId, listing.typeId);
+      const legacyCategory = CATEGORY_MAP[listing.categoryId];
+      const legacySubcategory = legacyCategory?.children.find((child) => child.id === listing.subCategoryId)?.name ?? '';
+      const taxonomyCategory = TAX_MAP[listing.categoryId];
+      const taxonomyType = listing.typeId
+        ? typesOf(listing.categoryId, listing.subCategoryId).find((type) => type.id === listing.typeId)?.name ?? ''
+        : '';
+      const attributes = Object.values(listing.attributes ?? {}).join(' ');
       const haystack = [
         listing.title,
         listing.description,
         listing.location,
         listing.city,
-        category?.name ?? '',
-        category?.children.find((child) => child.id === listing.subCategoryId)?.name ?? '',
+        taxonomyPath.join(' '),
+        taxonomyCategory?.name ?? '',
+        nodeName(listing.categoryId, listing.subCategoryId, listing.typeId),
+        legacyCategory?.name ?? '',
+        legacySubcategory,
+        taxonomyType,
+        attributes,
         listing.tags.join(' '),
         listing.features.join(' '),
         seller?.name ?? '',

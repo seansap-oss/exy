@@ -16,7 +16,7 @@ import { originalUrl } from './thumbnails';
 
 export type PlaybackKind =
   | 'inline'   // plays inside the EXY player (YouTube iframe, native <video>)
-  | 'embed'    // official provider embed mounted via their script (IG / FB)
+  | 'embed'    // EXY full-screen social experience (official IG iframe or FB hand-off)
   | 'external' // no embeddable form — open the original URL
   | 'none';    // no playable media at all
 
@@ -99,16 +99,28 @@ export function resolvePlayback(listing: Listing | undefined): Playback {
     };
   }
 
-  // 3. Instagram / Facebook need their own script. The player mounts the
-  //    official embed and always exposes the original link, because those
-  //    providers frequently refuse playback without a session.
-  if ((video.provider === 'instagram' || video.provider === 'facebook') && (original || video.embedSrc)) {
+  // 3. Instagram can use its official embed when Meta permits it.
+  if (video.provider === 'instagram' && (original || video.embedSrc)) {
     return {
       kind: 'embed',
-      provider: video.provider,
+      provider: 'instagram',
       src: video.embedSrc || null,
       original,
       label: 'Play video',
+      playable: true,
+    };
+  }
+
+  // Facebook may reject embedded players in Android WebView because of the
+  // post's privacy, region, login, or embedding setting. The Facebook app or
+  // browser is the reliable playback surface; do not show a broken iframe.
+  if (video.provider === 'facebook' && original) {
+    return {
+      kind: 'external',
+      provider: 'facebook',
+      src: null,
+      original,
+      label: 'Open in Facebook',
       playable: true,
     };
   }
@@ -140,6 +152,23 @@ export function openOriginal(url: string | null): boolean {
     return true;
   } catch {
     return false;
+  }
+}
+
+/** Opens a social listing in its provider app where supported. Facebook is
+ * always an explicit hand-off: it is never mounted inside EXY's player. */
+export function handoffToProvider(provider: VideoProvider | 'none', url: string | null): boolean {
+  if (!url) return false;
+  if (provider !== 'facebook') return openOriginal(url);
+
+  try {
+    window.location.href = `fb://facewebmodal/f?href=${encodeURIComponent(url)}`;
+    window.setTimeout(() => {
+      if (document.visibilityState === 'visible') window.location.href = url;
+    }, 850);
+    return true;
+  } catch {
+    return openOriginal(url);
   }
 }
 

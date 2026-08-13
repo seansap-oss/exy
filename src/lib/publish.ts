@@ -138,6 +138,12 @@ export async function saveListing(listing: Listing, publishLive: boolean): Promi
   };
   // Migration 004 columns; dropped automatically if the migration is pending.
   const row = { ...base, ...providerColumns(listing) };
+  // Taxonomy/provider fields were added after the original listings schema.
+  // Keep a narrow compatibility payload so a basic post still works while
+  // optional migrations are being applied.
+  const { type_id: _typeId, attributes: _attributes, provider: _provider,
+    provider_media_id: _providerMediaId, video_url: _videoUrl,
+    thumbnail_url: _thumbnailUrl, client_ref: _clientRef, ...legacyRow } = row;
 
   try {
     // Update when we already hold a real UUID, or when the same shared media
@@ -153,7 +159,7 @@ export async function saveListing(listing: Listing, publishLive: boolean): Promi
         error != null &&
         (/column .* does not exist/i.test(error.message) || error.code === '42703' || error.code === 'PGRST205')
       ) {
-        ({ data, error } = await supabase.from('listings').update(base).eq('id', existingId).select('id').single());
+        ({ data, error } = await supabase.from('listings').update(legacyRow).eq('id', existingId).select('id').single());
       }
       if (error) {
         return { ok: false, id: null, operation: 'update', error: error.message, reason: classify(error.message) };
@@ -177,7 +183,7 @@ export async function saveListing(listing: Listing, publishLive: boolean): Promi
       (/column .* does not exist/i.test(error.message) || error.code === '42703' || error.code === 'PGRST205');
 
     if (missingColumn) {
-      ({ data, error } = await supabase.from('listings').insert(base).select('id').single());
+      ({ data, error } = await supabase.from('listings').insert(legacyRow).select('id').single());
     }
     if (error) {
       return { ok: false, id: null, operation: 'insert', error: error.message, reason: classify(error.message) };
@@ -220,6 +226,33 @@ export async function setListingPublished(id: string, published: boolean): Promi
 export async function saveTicker(config: TickerConfig, publishLive: boolean): Promise<WriteResult> {
   if (!isSupabaseLive || !supabase) return offline();
   try {
+    const { data: authData, error: authError } = await supabase.auth.getUser();
+    if (authError || !authData.user) {
+      return {
+        ok: false,
+        id: null,
+        operation: 'none',
+        error: authError?.message ?? 'No active Supabase session. Sign in again before saving the ticker.',
+        reason: 'permission_denied',
+      };
+    }
+    const { data: profileRow, error: profileError } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', authData.user.id)
+      .maybeSingle();
+    if (profileError) {
+      return { ok: false, id: null, operation: 'none', error: `Could not verify your EXY role: ${profileError.message}`, reason: 'permission_denied' };
+    }
+    if (profileRow?.role !== 'admin') {
+      return {
+        ok: false,
+        id: null,
+        operation: 'none',
+        error: `Supabase rejected this write because ${authData.user.email ?? 'the signed-in account'} is not an admin. Grant role=admin in Supabase, then sign out and sign in again.`,
+        reason: 'permission_denied',
+      };
+    }
     const row = {
       ...configToRow(config),
       visible: publishLive ? config.enabled : false,

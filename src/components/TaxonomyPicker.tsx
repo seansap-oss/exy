@@ -15,6 +15,8 @@ interface Props {
   variant?: 'full' | 'compact';
   /** Hides the dynamic attribute block (bulk grid uses the Details drawer). */
   hideAttributes?: boolean;
+  /** Prefixes field ids so multiple pickers can coexist without duplicate ids. */
+  idPrefix?: string;
 }
 
 /**
@@ -23,7 +25,7 @@ interface Props {
  * single form and bulk importer so all four stay on one taxonomy and one set
  * of validation rules.
  */
-export function TaxonomyPicker({ value, onChange, variant = 'full', hideAttributes = false }: Props) {
+export function TaxonomyPicker({ value, onChange, variant = 'full', hideAttributes = false, idPrefix = 'tx' }: Props) {
   const subs = value.categoryId ? subcategoriesOf(value.categoryId) : [];
   const types = value.categoryId && value.subCategoryId ? typesOf(value.categoryId, value.subCategoryId) : [];
   const attrs = value.categoryId ? attributesOf(value.categoryId) : [];
@@ -43,10 +45,10 @@ export function TaxonomyPicker({ value, onChange, variant = 'full', hideAttribut
     <>
       <div className={gridClass}>
         <div className="field">
-          <label className="field__label" htmlFor="tx-cat">
+          <label className="field__label" htmlFor={`${idPrefix}-cat`}>
             Main category
           </label>
-          <select id="tx-cat" className="select" value={value.categoryId} onChange={(e) => setCategory(e.target.value)}>
+          <select id={`${idPrefix}-cat`} className="select" value={value.categoryId} onChange={(e) => setCategory(e.target.value)}>
             <option value="">Select category…</option>
             {TAXONOMY.map((category) => (
               <option key={category.id} value={category.id}>
@@ -58,10 +60,10 @@ export function TaxonomyPicker({ value, onChange, variant = 'full', hideAttribut
 
         {subs.length > 0 && (
           <div className="field">
-            <label className="field__label" htmlFor="tx-sub">
+            <label className="field__label" htmlFor={`${idPrefix}-sub`}>
               Subcategory
             </label>
-            <select id="tx-sub" className="select" value={value.subCategoryId} onChange={(e) => setSub(e.target.value)}>
+            <select id={`${idPrefix}-sub`} className="select" value={value.subCategoryId} onChange={(e) => setSub(e.target.value)}>
               <option value="">Select subcategory…</option>
               {subs.map((sub) => (
                 <option key={sub.id} value={sub.id}>
@@ -74,10 +76,10 @@ export function TaxonomyPicker({ value, onChange, variant = 'full', hideAttribut
 
         {types.length > 0 && (
           <div className="field">
-            <label className="field__label" htmlFor="tx-type">
+            <label className="field__label" htmlFor={`${idPrefix}-type`}>
               Type
             </label>
-            <select id="tx-type" className="select" value={value.typeId} onChange={(e) => setType(e.target.value)}>
+            <select id={`${idPrefix}-type`} className="select" value={value.typeId} onChange={(e) => setType(e.target.value)}>
               <option value="">Select type…</option>
               {types.map((type) => (
                 <option key={type.id} value={type.id}>
@@ -102,6 +104,7 @@ export function TaxonomyPicker({ value, onChange, variant = 'full', hideAttribut
                 attr={attr}
                 value={value.attributes[attr.key] ?? ''}
                 onChange={(next) => setAttr(attr.key, next)}
+                idPrefix={idPrefix}
               />
             ))}
           </div>
@@ -115,12 +118,14 @@ function AttrField({
   attr,
   value,
   onChange,
+  idPrefix,
 }: {
   attr: AttrDef;
   value: string;
   onChange: (next: string) => void;
+  idPrefix: string;
 }) {
-  const id = `attr-${attr.key}`;
+  const id = `${idPrefix}-attr-${attr.key}`;
   const label = `${attr.label}${attr.unit ? ` (${attr.unit})` : ''}${attr.required ? ' *' : ''}`;
 
   if (attr.input === 'select' && attr.options?.length) {

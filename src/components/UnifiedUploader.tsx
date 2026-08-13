@@ -19,6 +19,8 @@ interface Props {
   onChange: (items: NativeMedia[]) => void;
   maxPhotos?: number;
   maxVideos?: number;
+  /** Super Admin uploads are not capped by the seller plan. */
+  unlimited?: boolean;
   onError?: (message: string) => void;
   label?: string;
 }
@@ -43,6 +45,7 @@ export function UnifiedUploader({
   onChange,
   maxPhotos = 8,
   maxVideos = 3,
+  unlimited = false,
   onError,
   label = 'Add photos or videos',
 }: Props) {
@@ -56,8 +59,11 @@ export function UnifiedUploader({
   async function ingest(files: FileList | null) {
     if (!files?.length) return;
 
-    let photoRoom = maxPhotos - photos.length;
-    let videoRoom = maxVideos - videos.length;
+    // Keep a local accumulator so a multi-file pick cannot overwrite the
+    // previous item when each upload resolves asynchronously.
+    let nextItems = [...items];
+    let photoRoom = unlimited ? Infinity : maxPhotos - photos.length;
+    let videoRoom = unlimited ? Infinity : maxVideos - videos.length;
     const accepted: File[] = [];
 
     for (const file of Array.from(files)) {
@@ -94,7 +100,8 @@ export function UnifiedUploader({
 
         // Only confirmed uploads are surfaced to the form.
         if (!media.src) throw new Error('Storage did not return a URL.');
-        onChange([...items, media]);
+        nextItems = [...nextItems, media];
+        onChange(nextItems);
         setJobs((prev) => prev.filter((job) => job.id !== jobId));
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Upload failed.';
@@ -104,7 +111,9 @@ export function UnifiedUploader({
     }
   }
 
-  const full = photos.length >= maxPhotos && videos.length >= maxVideos;
+  const full = !unlimited && photos.length >= maxPhotos && videos.length >= maxVideos;
+  const photoLimit = unlimited ? 'Unlimited' : String(maxPhotos);
+  const videoLimit = unlimited ? 'Unlimited' : String(maxVideos);
 
   return (
     <div className="uu">
@@ -142,7 +151,7 @@ export function UnifiedUploader({
         <span className="uu__text">
           <b>{full ? 'Media limit reached' : label}</b>
           <span>
-            {photos.length}/{maxPhotos} photos · {videos.length}/{maxVideos} videos · tap or drop files
+            {photos.length}/{photoLimit} photos · {videos.length}/{videoLimit} videos · tap or drop files
           </span>
         </span>
       </button>

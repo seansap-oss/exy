@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Listing, Seller } from '../types';
-import { providerAllow } from '../lib/embeds';
 import { inr } from '../lib/format';
-import { IconChat, IconClose, IconHeart, IconSend, IconShare } from './Icons';
+import { fallbackGradient, originalUrl } from '../lib/thumbnails';
+import { handoffToProvider } from '../lib/playback';
+import { IconChat, IconClose, IconHeart, IconLink, IconSend, IconShare } from './Icons';
+import { VideoEmbed } from './VideoEmbed';
 
 interface Props {
   listing: Listing;
@@ -41,6 +43,9 @@ export function LiveClassifiedsOverlay({
   const playerRef = useRef<HTMLDivElement>(null);
   const messageInputRef = useRef<HTMLTextAreaElement>(null);
   const nativeVideo = listing.media?.find((item) => item.kind === 'video');
+  const socialOriginal = listing.video && (listing.video.provider === 'instagram' || listing.video.provider === 'facebook')
+    ? originalUrl(listing.video)
+    : null;
 
   useEffect(() => {
     const previousOverflow = document.body.style.overflow;
@@ -104,11 +109,15 @@ export function LiveClassifiedsOverlay({
           {nativeVideo ? (
             <video src={nativeVideo.src} poster={nativeVideo.poster} muted autoPlay loop playsInline controls />
           ) : listing.video ? (
-            <iframe
-              src={`${listing.video.embedSrc}${listing.video.provider === 'youtube' ? `${listing.video.embedSrc.includes('?') ? '&' : '?'}autoplay=1&mute=1&controls=1&playsinline=1&rel=0` : ''}`}
+            <VideoEmbed
+              video={listing.video}
+              fallback={fallbackGradient(listing)}
               title={listing.title}
-              allow={providerAllow(listing.video.provider)}
-              allowFullScreen
+              orientation="vertical"
+              autoStart
+              hideOpenOriginal
+              sellerName={seller?.name}
+              price={inr(listing.price)}
             />
           ) : (
             <div className="lco__fallback" style={{ background: listing.photos[0] }} />
@@ -142,6 +151,11 @@ export function LiveClassifiedsOverlay({
       <button className="lco__close" onClick={onClose} aria-label="Close video" title="Close video">
         <IconClose size={24} />
       </button>
+      {socialOriginal && (
+        <button className="lco__original" type="button" onClick={() => handoffToProvider(listing.video?.provider ?? 'none', socialOriginal)}>
+          <IconLink size={14} /> Open original
+        </button>
+      )}
       <button className="lco__fs" onClick={() => {
         if (!isFullscreen) {
           document.documentElement.requestFullscreen?.().catch(() => undefined);

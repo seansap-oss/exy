@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import type { Listing, ListingCondition, NativeMedia, Profile } from '../types';
 import { TAXONOMY, TAX_MAP, subcategoriesOf, typesOf, attributesOf } from '../data/taxonomy';
 import { parseVideoUrl, providerLabel } from '../lib/embeds';
-import { TIER_LIMITS } from '../lib/payments';
+import { isSuperAdmin, limitLabel, limitsForProfile } from '../lib/payments';
 import { uid } from '../lib/storage';
 import { UnifiedUploader } from './UnifiedUploader';
 import { HistorySuggest } from './HistorySuggest';
@@ -33,7 +33,8 @@ interface Props {
 }
 
 export function SellFlow({ open, onClose, profile, activeAdCount, onPublish, onUpgrade, onToast }: Props) {
-  const limits = TIER_LIMITS[profile.tier];
+  const admin = isSuperAdmin(profile);
+  const limits = limitsForProfile(profile);
   const [step, setStep] = useState(0);
   const [form, setForm] = useState({
     title: '',
@@ -62,7 +63,7 @@ export function SellFlow({ open, onClose, profile, activeAdCount, onPublish, onU
   const types = form.categoryId && form.subCategoryId ? typesOf(form.categoryId, form.subCategoryId) : [];
   const attrDefs = form.categoryId ? attributesOf(form.categoryId) : [];
   const video = useMemo(() => parseVideoUrl(form.videoUrl), [form.videoUrl]);
-  const overQuota = activeAdCount >= limits.ads;
+  const overQuota = !admin && activeAdCount >= limits.ads;
 
   const set = <K extends keyof typeof form>(key: K, value: (typeof form)[K]) =>
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -171,7 +172,11 @@ export function SellFlow({ open, onClose, profile, activeAdCount, onPublish, onU
       open={open}
       onClose={onClose}
       title="Post a listing"
-      subtitle={`${profile.tier.toUpperCase()} plan · ${activeAdCount}/${limits.ads} ads used · ${limits.photos} photos · ${limits.videos ? `${limits.videos} video embed` : 'no video embed'}`}
+      subtitle={
+        admin
+          ? `SUPER ADMIN · ${activeAdCount} active ads used · Unlimited photos · Unlimited video`
+          : `${profile.tier.toUpperCase()} plan · ${activeAdCount}/${limitLabel(limits.ads)} ads used · ${limitLabel(limits.photos)} photos · ${limits.videos ? `${limits.videos} video embed` : 'no video embed'}`
+      }
       footer={
         <>
           {step > 0 && (
@@ -207,7 +212,7 @@ export function SellFlow({ open, onClose, profile, activeAdCount, onPublish, onU
         ))}
       </div>
 
-      {overQuota && (
+      {overQuota && !admin && (
         <div className="urgency" style={{ marginBottom: 18 }}>
           <span className="urgency__flame">⚡</span>
           <span>
@@ -496,9 +501,9 @@ export function SellFlow({ open, onClose, profile, activeAdCount, onPublish, onU
               value={form.videoUrl}
               onChange={(event) => set('videoUrl', event.target.value)}
               placeholder="https://www.instagram.com/reel/… or https://youtube.com/shorts/…"
-              disabled={limits.videos === 0}
+              disabled={limits.videos === 0 && !admin}
             />
-            {limits.videos === 0 ? (
+            {limits.videos === 0 && !admin ? (
               <span className="field__hint">
                 Video embeds are not included in the Free plan.{' '}
                 <button style={{ color: 'var(--accent)', fontWeight: 700 }} onClick={onUpgrade}>
@@ -514,7 +519,7 @@ export function SellFlow({ open, onClose, profile, activeAdCount, onPublish, onU
             )}
           </div>
 
-          {video && limits.videos > 0 && !hosted.length && (
+          {video && (limits.videos > 0 || admin) && !hosted.length && (
             <div style={{ maxWidth: 300, margin: '0 auto 18px' }}>
               <VideoEmbed video={video} title="Listing hero preview" />
             </div>
@@ -532,9 +537,10 @@ export function SellFlow({ open, onClose, profile, activeAdCount, onPublish, onU
               onChange={setHosted}
               maxPhotos={limits.photos}
               maxVideos={limits.videos}
+              unlimited={admin}
               onError={(message) => onToast(message, 'err')}
             />
-            {limits.videos === 0 && (
+            {limits.videos === 0 && !admin && (
               <span className="field__hint">
                 Photos only on the Free plan.{' '}
                 <button style={{ color: 'var(--accent)', fontWeight: 700 }} onClick={onUpgrade}>
@@ -550,7 +556,7 @@ export function SellFlow({ open, onClose, profile, activeAdCount, onPublish, onU
           {/* Cover style is still available when no photo has been uploaded. */}
           {!hosted.some((item) => item.kind === 'image') && (
             <div className="field">
-              <span className="field__label">Cover style ({form.photos.length}/{limits.photos})</span>
+              <span className="field__label">Cover style ({form.photos.length}/{limitLabel(limits.photos)})</span>
               <span className="field__hint" style={{ marginBottom: 10 }}>
                 Used as the card background when you haven't uploaded a photo.
               </span>

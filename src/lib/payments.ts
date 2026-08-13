@@ -1,4 +1,4 @@
-import type { Package, Tier } from '../types';
+import type { Package, Profile, Tier } from '../types';
 import { uid } from './storage';
 
 export const RAZORPAY_KEY_ID = (import.meta.env.VITE_RAZORPAY_KEY_ID as string) || 'rzp_test_EXYDEMOKEY01';
@@ -71,12 +71,27 @@ export const PACKAGES: Package[] = [
   },
 ];
 
-export const TIER_LIMITS: Record<Tier, { ads: number; photos: number; videos: number }> = {
+export type ListingLimits = { ads: number; photos: number; videos: number };
+
+export const TIER_LIMITS: Record<Tier, ListingLimits> = {
   free: { ads: 1, photos: 3, videos: 0 },
   standard: { ads: 3, photos: 4, videos: 1 },
   comprehensive: { ads: 10, photos: 20, videos: 10 },
   dealer: { ads: 9999, photos: 99, videos: 99 },
 };
+
+/** Admin is an operational role, not a paid tier. It must never be blocked by seller quotas. */
+export function isSuperAdmin(profile: Pick<Profile, 'role'> | null | undefined): boolean {
+  return profile?.role === 'admin';
+}
+
+export function limitsForProfile(profile: Pick<Profile, 'role' | 'tier'>): ListingLimits {
+  return isSuperAdmin(profile) ? { ads: Infinity, photos: Infinity, videos: Infinity } : TIER_LIMITS[profile.tier];
+}
+
+export function limitLabel(value: number): string {
+  return Number.isFinite(value) ? String(value) : 'Unlimited';
+}
 
 export type PayMethod = 'upi-gpay' | 'upi-phonepe' | 'upi-paytm' | 'upi-id' | 'netbanking' | 'card';
 

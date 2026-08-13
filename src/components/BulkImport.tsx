@@ -166,6 +166,7 @@ export function BulkImport({ sellers, listings, onListings, onToast }: Props) {
 
     let ok = 0;
     let failed = 0;
+    const confirmed: Listing[] = [];
 
     for (let index = 0; index < targets.length; index += 1) {
       const row = targets[index];
@@ -179,7 +180,12 @@ export function BulkImport({ sellers, listings, onListings, onToast }: Props) {
         const result = await saveListing(listing, publishLive);
         if (result.ok) {
           patch(row.key, { busy: false, error: null, publishedId: result.id });
-          if (publishLive) onListings([{ ...listing, id: result.id ?? listing.id }, ...listings]);
+          if (publishLive) {
+            confirmed.push({ ...listing, id: result.id ?? listing.id });
+            // Include all earlier confirmed rows in this batch. The parent
+            // state is intentionally not treated as an optimistic write.
+            onListings([...confirmed, ...listings]);
+          }
           ok += 1;
         } else {
           patch(row.key, { busy: false, error: result.error });
@@ -432,6 +438,7 @@ export function BulkImport({ sellers, listings, onListings, onToast }: Props) {
                             })
                           }
                           variant="compact"
+                          idPrefix={`bulk-${row.key}`}
                         />
                       </div>
                     </td>
