@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { VideoEmbed as VideoEmbedType } from '../types';
 import { providerAllow, providerLabel } from '../lib/embeds';
 import { fallbackGradient, originalUrl, thumbnailCandidates } from '../lib/thumbnails';
@@ -22,13 +22,22 @@ interface Props {
   hideOpenOriginal?: boolean;
 }
 
+function resolvedEmbedSource(video: VideoEmbedType): string {
+  // Older Supabase rows deliberately store no Facebook iframe. Rebuild the
+  // official plugin URL only in memory; it is mounted only after oEmbed proves
+  // the post is public and embeddable.
+  if (video.provider === 'facebook' && video.url) {
+    return `https://www.facebook.com/plugins/video.php?href=${encodeURIComponent(video.url)}&show_text=false&autoplay=true&width=500`;
+  }
+  return video.embedSrc;
+}
+
 /**
  * Provider-aware media renderer.
  *
  * - YouTube / native  → plays inline in the card
- * - Instagram → uses its official direct iframe only after availability check
- * - Facebook → opens in Facebook instead of rendering a fragile, provider-owned
- *              iframe inside Android WebView
+ * - Instagram / Facebook → official iframe only after availability check
+ * - Meta iframe navigation → clean EXY fallback, never a provider login page
  * - No/failed media   → branded EXY preview, never an empty box
  */
 export function VideoEmbed({
@@ -37,40 +46,43 @@ export function VideoEmbed({
 }: Props) {
   const [playing, setPlaying] = useState(autoStart);
   const [socialAvailability, setSocialAvailability] = useState<'checking' | 'ready' | 'unavailable'>(() =>
-    video?.provider === 'instagram' ? 'checking' : 'ready',
+    video?.provider === 'instagram' || video?.provider === 'facebook' ? 'checking' : 'ready',
   );
+  const [socialNavigated, setSocialNavigated] = useState(false);
+  const socialFrameLoads = useRef(0);
   const gradient = fallback ?? fallbackGradient();
-  const socialEmbeddable = video?.provider === 'instagram';
-  const facebookExternalOnly = video?.provider === 'facebook';
+  const socialEmbeddable = video?.provider === 'instagram' || video?.provider === 'facebook';
+  const currentEmbedSrc = video ? resolvedEmbedSource(video) : '';
 
   useEffect(() => {
     setPlaying(autoStart);
-  }, [autoStart, video?.embedSrc]);
+    setSocialNavigated(false);
+    socialFrameLoads.current = 0;
+  }, [autoStart, currentEmbedSrc]);
 
   // Validate social posts before mounting their cross-origin iframe. When Meta
   // has already said a post is private/deleted/restricted, showing a localized
   // provider error page is worse than an honest EXY fallback.
   useEffect(() => {
-    if (!video || video.provider !== 'instagram') {
+    if (!video || (video.provider !== 'instagram' && video.provider !== 'facebook')) {
       setSocialAvailability('ready');
       return;
     }
 
     let active = true;
     setSocialAvailability('checking');
-    const controller = new AbortController();
 
-    void fetchOEmbed(video.url, controller.signal).then((result) => {
+    // Keep this shared request alive across React StrictMode's development
+    // remount. Cancelling it here makes the replacement mount inherit the
+    // first mount's aborted promise and falsely report a public post missing.
+    void fetchOEmbed(video.url).then((result) => {
       if (!active) return;
-      // Only mount a social player when Meta explicitly confirms availability.
-      // This prevents Facebook's translated provider error page from taking
-      // over EXY's full-screen player.
+      // Only mount a Meta player when Meta explicitly confirms availability.
       setSocialAvailability(result?.available === true ? 'ready' : 'unavailable');
     });
 
     return () => {
       active = false;
-      controller.abort();
     };
   }, [video?.provider, video?.url]);
 
@@ -89,30 +101,26 @@ export function VideoEmbed({
   const posterCandidates = candidates?.length ? candidates : thumbnailCandidates(video);
   const cls = `video video--${orientation === 'wide' ? 'wide' : 'vertical'}`;
   const iframeSrc = video.provider === 'youtube'
-    ? `${video.embedSrc}${video.embedSrc.includes('?') ? '&' : '?'}autoplay=1&mute=1&controls=1&playsinline=1&rel=0`
-    : video.embedSrc;
-  const showUnavailable = socialEmbeddable && socialAvailability === 'unavailable';
+    ? `${currentEmbedSrc.replace(/([?&])autoplay=[01]/, '$1autoplay=1')}&mute=1&controls=1&playsinline=1&rel=0`
+    : currentEmbedSrc;
+  const showUnavailable = socialEmbeddable && (socialAvailability === 'unavailable' || socialNavigated);
   const showChecking = socialEmbeddable && socialAvailability === 'checking';
   const iframeEligible = video.provider === 'youtube' || socialEmbeddable;
-  const providerFallbackTitle = facebookExternalOnly
-      ? 'Open this Reel in Facebook.'
-      : showChecking
+  const providerFallbackTitle = showChecking
       ? `Checking this ${providerLabel(video.provider)}…`
       : `${providerLabel(video.provider)} cannot play this post here.`;
-  const providerFallbackDetail = facebookExternalOnly
-      ? 'Facebook controls whether a Reel can be embedded. Opening it in Facebook keeps the player, audio and privacy settings intact.'
-      : showChecking
+  const providerFallbackDetail = showChecking
       ? 'Preparing the official player.'
-      : 'The post may be private, deleted, age-restricted, or not allowed to be embedded.';
-  const providerActionLabel = video.provider === 'facebook' ? 'Open in Facebook' : 'Open in Instagram';
-
+      : socialNavigated
+        ? 'Meta requires a login or redirected away from the embedded player.'
+        : 'The post may be private, deleted, age-restricted, or not allowed to be embedded.';
   return (
     <div className={cls}>
       {playing ? (
         <>
           {video.provider === 'native' ? (
             <video src={video.embedSrc} poster={video.poster} controls autoPlay playsInline className="video__native" />
-          ) : iframeEligible && video.embedSrc && !showUnavailable && !showChecking ? (
+          ) : iframeEligible && currentEmbedSrc && !showUnavailable && !showChecking ? (
             socialEmbeddable ? (
               <div className={`video__social-stage video__social-stage--${video.provider}`}>
                 <iframe
@@ -123,6 +131,13 @@ export function VideoEmbed({
                   allowFullScreen
                   loading="lazy"
                   referrerPolicy="strict-origin-when-cross-origin"
+                  sandbox="allow-scripts allow-same-origin allow-forms allow-presentation"
+                  onLoad={() => {
+                    socialFrameLoads.current += 1;
+                    // A second document load means the provider has navigated
+                    // away from its embed into a login/profile/error surface.
+                    if (socialFrameLoads.current > 1) setSocialNavigated(true);
+                  }}
                 />
               </div>
             ) : (
@@ -170,7 +185,7 @@ export function VideoEmbed({
                   className="video__provider-action"
                   onClick={() => handoffToProvider(video.provider, original)}
                 >
-                  <IconLink size={15} /> {providerActionLabel}
+                  <IconLink size={15} /> Open original
                 </button>
               )}
             </div>
@@ -196,13 +211,9 @@ export function VideoEmbed({
         <button
           className="video__poster"
           onClick={() => {
-            if (facebookExternalOnly && original) {
-              handoffToProvider('facebook', original);
-              return;
-            }
             setPlaying(true);
           }}
-          aria-label={facebookExternalOnly ? 'Open video in Facebook' : 'Play video'}
+          aria-label="Play video"
         >
           <MediaPreview
             candidates={posterCandidates}

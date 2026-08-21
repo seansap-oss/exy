@@ -96,10 +96,9 @@ export function parseVideoUrl(rawUrl: string, autoplay = false): VideoEmbed | nu
       provider,
       url,
       externalId: id ?? url,
-      // Facebook's iframe/plugin frequently renders a provider-controlled,
-      // localised error document inside Android WebView. Keep the public URL
-      // as the source of truth and hand off to Facebook instead of embedding.
-      embedSrc: '',
+      // VideoEmbed validates this URL through the server-side oEmbed proxy
+      // before mounting the provider iframe.
+      embedSrc: `https://www.facebook.com/plugins/video.php?href=${encodeURIComponent(url)}&show_text=false&autoplay=true&width=500`,
     };
   }
 

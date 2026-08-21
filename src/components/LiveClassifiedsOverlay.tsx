@@ -1,9 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Listing, Seller } from '../types';
 import { inr } from '../lib/format';
-import { fallbackGradient, originalUrl } from '../lib/thumbnails';
-import { handoffToProvider } from '../lib/playback';
-import { IconChat, IconClose, IconHeart, IconLink, IconSend, IconShare } from './Icons';
+import { fallbackGradient } from '../lib/thumbnails';
+import { IconChat, IconClose, IconHeart, IconSend, IconShare } from './Icons';
 import { VideoEmbed } from './VideoEmbed';
 
 interface Props {
@@ -43,9 +42,6 @@ export function LiveClassifiedsOverlay({
   const playerRef = useRef<HTMLDivElement>(null);
   const messageInputRef = useRef<HTMLTextAreaElement>(null);
   const nativeVideo = listing.media?.find((item) => item.kind === 'video');
-  const socialOriginal = listing.video && (listing.video.provider === 'instagram' || listing.video.provider === 'facebook')
-    ? originalUrl(listing.video)
-    : null;
 
   useEffect(() => {
     const previousOverflow = document.body.style.overflow;
@@ -151,11 +147,6 @@ export function LiveClassifiedsOverlay({
       <button className="lco__close" onClick={onClose} aria-label="Close video" title="Close video">
         <IconClose size={24} />
       </button>
-      {socialOriginal && (
-        <button className="lco__original" type="button" onClick={() => handoffToProvider(listing.video?.provider ?? 'none', socialOriginal)}>
-          <IconLink size={14} /> Open original
-        </button>
-      )}
       <button className="lco__fs" onClick={() => {
         if (!isFullscreen) {
           document.documentElement.requestFullscreen?.().catch(() => undefined);

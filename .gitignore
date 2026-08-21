@@ -8,3 +8,7 @@ android/.gradle/
 android/build/
 android/app/build/
 *.log
+api/*.js
+api/*.d.ts
+
+.env*

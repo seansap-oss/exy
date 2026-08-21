@@ -2608,7 +2608,7 @@ function Footer({
         </div>
 
         <div className="footer__bottom">
-          <span>© {new Date().getFullYear()} EXY Classifieds. Built for global use. <small className="app-version">v{RELEASE_VERSION}</small></span>
+          <span>© {new Date().getFullYear()} EXY Classifieds. Built for everyone. <small className="app-version">v{RELEASE_VERSION}</small></span>
           <span>Instagram · YouTube Shorts · Facebook Reels · TikTok indexing</span>
         </div>
         <button

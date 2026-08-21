@@ -6867,3 +6867,51 @@ select.bulk-input {
     height: 44px;
   }
 }
+
+/* ===========================================================================
+   v1.5.30 — one EXY social-media canvas
+   ---------------------------------------------------------------------------
+   This final, deliberately narrow override resolves the old 9:14 feed-card
+   rule and the competing provider sizing rules above it.  EXY owns the outer
+   9:16 frame; a provider iframe is only a clipped child of that frame.  The
+   Meta document may still refuse playback, but it can never resize, crop, or
+   escape into the listing controls.
+   =========================================================================== */
+.feed__slide {
+  aspect-ratio: 9 / 16;
+}
+
+.feed-card__media,
+.fs-player__frame,
+.lco__video,
+.lco__video > .video,
+.fs-player__frame > .video,
+.lco__video > .video .video__social-stage,
+.fs-player__frame > .video .video__social-stage {
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.lco__video > .video .video__social-stage,
+.fs-player__frame > .video .video__social-stage,
+.lco__video > .video .video__frame,
+.fs-player__frame > .video .video__frame {
+  min-width: 0 !important;
+  min-height: 0 !important;
+  max-width: 100% !important;
+  max-height: 100% !important;
+}
+
+/* The embed may be a provider-owned error document.  It remains a fitted
+   child of EXY's player instead of influencing the player size. */
+.lco__video > .video .video__frame--instagram,
+.fs-player__frame > .video .video__frame--instagram {
+  position: absolute !important;
+  inset: 0 !important;
+  display: block !important;
+  width: 100% !important;
+  height: 100% !important;
+  margin: 0 !important;
+  border: 0 !important;
+  background: #000;
+}

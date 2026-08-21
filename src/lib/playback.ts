@@ -16,7 +16,7 @@ import { originalUrl } from './thumbnails';
 
 export type PlaybackKind =
   | 'inline'   // plays inside the EXY player (YouTube iframe, native <video>)
-  | 'embed'    // EXY full-screen social experience (official IG iframe or FB hand-off)
+  | 'embed'    // EXY full-screen social experience (validated Meta iframe/fallback)
   | 'external' // no embeddable form — open the original URL
   | 'none';    // no playable media at all
 
@@ -111,16 +111,15 @@ export function resolvePlayback(listing: Listing | undefined): Playback {
     };
   }
 
-  // Facebook may reject embedded players in Android WebView because of the
-  // post's privacy, region, login, or embedding setting. The Facebook app or
-  // browser is the reliable playback surface; do not show a broken iframe.
+  // Facebook opens the bounded EXY viewer. VideoEmbed validates availability
+  // before mounting the provider iframe; leaving EXY is always explicit.
   if (video.provider === 'facebook' && original) {
     return {
-      kind: 'external',
+      kind: 'embed',
       provider: 'facebook',
       src: null,
       original,
-      label: 'Open in Facebook',
+      label: 'View Facebook video',
       playable: true,
     };
   }
@@ -156,7 +155,7 @@ export function openOriginal(url: string | null): boolean {
 }
 
 /** Opens a social listing in its provider app where supported. Facebook is
- * always an explicit hand-off: it is never mounted inside EXY's player. */
+ * is used only after an explicit Open Original action. */
 export function handoffToProvider(provider: VideoProvider | 'none', url: string | null): boolean {
   if (!url) return false;
   if (provider !== 'facebook') return openOriginal(url);

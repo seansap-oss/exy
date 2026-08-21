@@ -8,7 +8,7 @@ function assert(condition, message) {
   if (!condition) throw new Error(message);
 }
 
-assert(pkg.version === '1.5.29', `Expected EXY v1.5.29, found ${pkg.version}.`);
+assert(pkg.version === '1.5.30', `Expected EXY v1.5.30, found ${pkg.version}.`);
 assert(auth.includes('const LOCAL_DEMO_AUTH_ENABLED = import.meta.env.DEV;'), 'Production/demo authentication boundary is missing.');
 assert(auth.includes('if (!isSupabaseLive && !LOCAL_DEMO_AUTH_ENABLED)'), 'Production sign-in must reject a missing Supabase configuration.');
 assert(auth.includes("Demo sign-in is unavailable in production. Check the production Supabase configuration."), 'Production cannot safely reject the local mock sign-in route.');

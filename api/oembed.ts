@@ -36,6 +36,27 @@ const CACHE_MAX_ENTRIES = 500;
 const RATE_LIMIT_WINDOW_MS = 60_000;
 const RATE_LIMIT_MAX = 60; // per IP per minute
 
+// The browser build uses the production Vercel function while developing on
+// Vite, and Capacitor serves the installed app from a localhost origin. Keep
+// this list exact: EXY clients may call the proxy, but it must not become a
+// wildcard oEmbed service for arbitrary websites.
+const ALLOWED_ORIGINS = new Set([
+  'https://exy-green.vercel.app',
+  'http://127.0.0.1:5173',
+  'http://localhost:5173',
+  'https://localhost',
+  'http://localhost',
+  'capacitor://localhost',
+]);
+
+function applyCors(request: VercelRequest, response: VercelResponse): void {
+  const origin = typeof request.headers.origin === 'string' ? request.headers.origin : '';
+  if (!ALLOWED_ORIGINS.has(origin)) return;
+  response.setHeader('Access-Control-Allow-Origin', origin);
+  response.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  response.setHeader('Access-Control-Allow-Headers', 'Accept, Content-Type');
+}
+
 /* -------------------------------------------------------------------------- */
 /* Strict URL validation — the endpoint must not become an open proxy          */
 /* -------------------------------------------------------------------------- */
@@ -294,10 +315,11 @@ async function fetchOEmbed(
 /* Handler                                                                     */
 /* -------------------------------------------------------------------------- */
 export default async function handler(request: VercelRequest, response: VercelResponse) {
-  // Same-origin JSON API. No wildcard CORS, so third parties cannot use this
-  // as a free oEmbed proxy from the browser.
+  // Exact-origin CORS supports Vite and Capacitor without exposing a wildcard
+  // proxy to third-party websites.
   response.setHeader('Vary', 'Origin');
   response.setHeader('X-Content-Type-Options', 'nosniff');
+  applyCors(request, response);
 
   if (request.method === 'OPTIONS') return response.status(204).end();
   if (request.method !== 'GET') {

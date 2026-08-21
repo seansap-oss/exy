@@ -66,8 +66,10 @@ export async function fetchOEmbed(url: string, signal?: AbortSignal): Promise<OE
       const data = (await response.json()) as OEmbedResult;
       memory.set(url, data);
       return data;
-    } catch {
-      memory.set(url, null);
+    } catch (error) {
+      // An overlay closing or a recycled feed card can abort its own request.
+      // Do not poison the session cache; a later viewer must be able to retry.
+      if (!(error instanceof Error && error.name === 'AbortError')) memory.set(url, null);
       return null;
     } finally {
       inflight.delete(url);

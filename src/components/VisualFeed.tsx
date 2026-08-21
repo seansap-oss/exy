@@ -270,7 +270,7 @@ function FeedCard({
           />
         ) : started && playback.kind === 'inline' && playback.src ? (
           <iframe
-            src={`${playback.src}${playback.src.includes('?') ? '&' : '?'}autoplay=1&mute=1&controls=1&playsinline=1&rel=0`}
+            src={`${playback.src.replace(/([?&])autoplay=[01]/, '$1autoplay=1')}&mute=1&controls=1&playsinline=1&rel=0`}
             title={listing.title}
             allow={providerAllow(listing.video?.provider ?? 'youtube')}
             allowFullScreen
@@ -285,8 +285,14 @@ function FeedCard({
               event.stopPropagation();
               if (!playback.playable) return;
 
-              // YouTube / native → play inline, then expand on a second tap.
+              // YouTube opens the auto-starting EXY viewer immediately. From
+              // the Home video rail this makes Home → Feed → playing video a
+              // two-action flow instead of requiring a third player tap.
               if (playback.kind === 'inline') {
+                if (playback.provider === 'youtube') {
+                  onExpand();
+                  return;
+                }
                 if (started) onExpand();
                 else onStart();
                 return;
@@ -412,7 +418,7 @@ export function FullscreenPlayer({ listing, onClose }: { listing: Listing; onClo
         )}
 
         {/* Always reachable escape hatch when a provider blocks playback. */}
-        {playback.original && playback.kind !== 'inline' && (
+        {playback.original && playback.kind !== 'inline' && playback.provider !== 'instagram' && playback.provider !== 'facebook' && (
           <button
             className="fs-player__open"
             onClick={() => handoffToProvider(playback.provider, playback.original)}

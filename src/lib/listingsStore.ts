@@ -23,8 +23,8 @@ export function rowToListing(row: any): Listing {
         provider,
         url: videoUrl,
         externalId,
-        // Recreate provider sources from the original URL. Facebook must not
-        // restore its legacy plugin iframe from an older JSONB row.
+        // Recreate provider sources from the original URL. Facebook remains
+        // empty at rest and is rebuilt only after the runtime oEmbed check.
         embedSrc: String(
           provider === 'facebook'
               ? ''
