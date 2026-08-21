@@ -22,12 +22,12 @@ interface Props {
   hideOpenOriginal?: boolean;
 }
 
-function resolvedEmbedSource(video: VideoEmbedType): string {
+function resolvedEmbedSource(video: VideoEmbedType, resolvedSocialUrl: string): string {
   // Older Supabase rows deliberately store no Facebook iframe. Rebuild the
   // official plugin URL only in memory; it is mounted only after oEmbed proves
   // the post is public and embeddable.
   if (video.provider === 'facebook' && video.url) {
-    return `https://www.facebook.com/plugins/video.php?href=${encodeURIComponent(video.url)}&show_text=false&autoplay=true&width=500`;
+    return `https://www.facebook.com/plugins/video.php?href=${encodeURIComponent(resolvedSocialUrl || video.url)}&show_text=false&autoplay=true&width=500`;
   }
   return video.embedSrc;
 }
@@ -49,10 +49,11 @@ export function VideoEmbed({
     video?.provider === 'instagram' || video?.provider === 'facebook' ? 'checking' : 'ready',
   );
   const [socialNavigated, setSocialNavigated] = useState(false);
+  const [resolvedSocialUrl, setResolvedSocialUrl] = useState(video?.url ?? '');
   const socialFrameLoads = useRef(0);
   const gradient = fallback ?? fallbackGradient();
   const socialEmbeddable = video?.provider === 'instagram' || video?.provider === 'facebook';
-  const currentEmbedSrc = video ? resolvedEmbedSource(video) : '';
+  const currentEmbedSrc = video ? resolvedEmbedSource(video, resolvedSocialUrl) : '';
 
   useEffect(() => {
     setPlaying(autoStart);
@@ -71,6 +72,7 @@ export function VideoEmbed({
 
     let active = true;
     setSocialAvailability('checking');
+    setResolvedSocialUrl(video.url);
 
     // Keep this shared request alive across React StrictMode's development
     // remount. Cancelling it here makes the replacement mount inherit the
@@ -78,6 +80,7 @@ export function VideoEmbed({
     void fetchOEmbed(video.url).then((result) => {
       if (!active) return;
       // Only mount a Meta player when Meta explicitly confirms availability.
+      if (result?.available === true && result.normalizedUrl) setResolvedSocialUrl(result.normalizedUrl);
       setSocialAvailability(result?.available === true ? 'ready' : 'unavailable');
     });
 

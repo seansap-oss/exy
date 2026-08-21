@@ -138,6 +138,7 @@ export default function Prototype() {
 
   /* ------------------------------ ephemeral state ------------------------------ */
   const [route, setRoute] = useState<Route>({ name: 'home' });
+  const routeScrollRef = useRef<Partial<Record<Route['name'], number>>>({});
   const [filters, setFilters] = useState<SearchFilters>(EMPTY_FILTERS);
   const [searchOpen, setSearchOpen] = useState(false);
   const [authOpen, setAuthOpen] = useState(false);
@@ -225,8 +226,11 @@ export default function Prototype() {
   }, []);
 
   useEffect(() => {
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  }, [route]);
+    const frame = window.requestAnimationFrame(() => {
+      window.scrollTo({ top: routeScrollRef.current[route.name] ?? 0, behavior: 'auto' });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [route.name]);
 
   useEffect(() => () => {
     if (adminPressTimer.current !== null) window.clearTimeout(adminPressTimer.current);
@@ -369,16 +373,18 @@ export default function Prototype() {
   const historyRef = useRef<Route[]>([]);
 
   const go = useCallback((next: Route) => {
+    routeScrollRef.current[route.name] = window.scrollY;
     setRoute((prev) => {
       if (JSON.stringify(prev) !== JSON.stringify(next)) {
         historyRef.current = [...historyRef.current, prev].slice(-30);
       }
       return next;
     });
-  }, []);
+  }, [route.name]);
 
   /** Pops one step. Returns false when already at the root home view. */
   const popRoute = useCallback(() => {
+    routeScrollRef.current[route.name] = window.scrollY;
     const stack = historyRef.current;
     if (stack.length) {
       historyRef.current = stack.slice(0, -1);
@@ -710,26 +716,29 @@ export default function Prototype() {
         )}
 
         {route.name === 'feed' && (
-          <div className="shell">
-            <div className="feed-bar">
-              <h2 className="feed-bar__title">Visual Feed</h2>
-              <button className="btn btn--ghost btn--sm" onClick={() => go({ name: 'browse' })}>
-                <IconGrid size={15} /> Grid view
-              </button>
+          <div className="feed-view">
+            <CategoryRail categories={categories} onGo={go} />
+            <div className="feed-view__content shell">
+              <div className="feed-bar">
+                <h2 className="feed-bar__title">Visual Feed</h2>
+                <button className="btn btn--ghost btn--sm" onClick={() => go({ name: 'browse' })}>
+                  <IconGrid size={15} /> Grid view
+                </button>
+              </div>
+              <VisualFeed
+                listings={listings}
+                sellerMap={sellerMap}
+                saved={saved}
+                startId={route.startId}
+                onToggleSave={toggleSave}
+                onOpenListing={openListing}
+                onContact={startThread}
+                onQualifiedView={qualifiedView}
+                onImpression={(id) => recordEvent(id, 'impression')}
+                onExpand={setFullscreen}
+                onDeadMedia={(message) => toast(message, 'err')}
+              />
             </div>
-            <VisualFeed
-              listings={listings}
-              sellerMap={sellerMap}
-              saved={saved}
-              startId={route.startId}
-              onToggleSave={toggleSave}
-              onOpenListing={openListing}
-              onContact={startThread}
-              onQualifiedView={qualifiedView}
-              onImpression={(id) => recordEvent(id, 'impression')}
-              onExpand={setFullscreen}
-              onDeadMedia={(message) => toast(message, 'err')}
-            />
           </div>
         )}
 
@@ -1138,6 +1147,27 @@ function Header({
 /* ========================================================================== */
 /* Home                                                                        */
 /* ========================================================================== */
+function CategoryRail({ categories, onGo }: { categories: Category[]; onGo: (route: Route) => void }) {
+  return (
+    <section className="home-c__categories shell">
+      <div className="home-c__section-head">
+        <h2>Browse categories</h2>
+        <button className="home-c__link" onClick={() => onGo({ name: 'browse' })}>
+          View all <IconArrow size={14} />
+        </button>
+      </div>
+      <div className="home-c__category-rail swipe-x">
+        {categories.slice(0, 7).map((category) => (
+          <button key={category.id} className="home-c__category" onClick={() => onGo({ name: 'browse', categoryId: category.id })}>
+            <CategoryOrb category={category} />
+            <span>{category.name.replace(' & ', ' · ')}</span>
+          </button>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function HomeView({
   categories,
   listings,
@@ -1182,8 +1212,6 @@ function HomeView({
     }
   };
 
-  const visibleCategories = categories.slice(0, 7);
-
   const mediaStyle = (listing: Listing): CSSProperties => ({
     backgroundImage: listing.video?.poster ? `url(${listing.video.poster})` : undefined,
     background: listing.video?.poster ? undefined : listing.photos[0] || 'var(--surface-2)',
@@ -1193,20 +1221,7 @@ function HomeView({
 
   return (
     <div className="home-c">
-      <section className="home-c__categories shell">
-        <div className="home-c__section-head">
-          <h2>Browse categories</h2>
-          <button className="home-c__link" onClick={() => onGo({ name: 'browse' })}>View all <IconArrow size={14} /></button>
-        </div>
-        <div className="home-c__category-rail swipe-x">
-          {visibleCategories.map((category) => (
-            <button key={category.id} className="home-c__category" onClick={() => onGo({ name: 'browse', categoryId: category.id })}>
-              <CategoryOrb category={category} />
-              <span>{category.name.replace(' & ', ' · ')}</span>
-            </button>
-          ))}
-        </div>
-      </section>
+      <CategoryRail categories={categories} onGo={onGo} />
 
       <section className="home-c__hero shell">
         <div className="home-c__section-head">

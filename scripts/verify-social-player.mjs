@@ -10,20 +10,21 @@ const oembed = readFileSync('src/lib/oembed.ts', 'utf8');
 const playback = readFileSync('src/lib/playback.ts', 'utf8');
 const scripts = readFileSync('src/lib/embedScripts.ts', 'utf8');
 const api = readFileSync('api/oembed.ts', 'utf8');
+const prototype = readFileSync('src/Prototype.tsx', 'utf8');
 const pkg = JSON.parse(readFileSync('package.json', 'utf8'));
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
 }
 
-assert(pkg.version === '1.5.33', `Expected EXY v1.5.33, found ${pkg.version}.`);
+assert(pkg.version === '1.5.35', `Expected EXY v1.5.35, found ${pkg.version}.`);
 
 // Check 1 - runtime provider gate. Meta players mount only after oEmbed proves
 // availability; provider self-navigation becomes an EXY fallback.
 assert(parser.includes('https://www.facebook.com/plugins/video.php?href=${encodeURIComponent(url)}'), 'Facebook parser does not create the official plugin URL.');
 assert(embed.includes("const socialEmbeddable = video?.provider === 'instagram' || video?.provider === 'facebook';"), 'Facebook is not enabled in the bounded social stage.');
-assert(embed.includes('function resolvedEmbedSource(video: VideoEmbedType): string'), 'Existing-record embed recovery is missing.');
-assert(embed.includes('encodeURIComponent(video.url)'), 'Existing Facebook URLs are not rebuilt safely at render time.');
+assert(embed.includes('function resolvedEmbedSource(video: VideoEmbedType, resolvedSocialUrl: string): string'), 'Existing-record embed recovery is missing.');
+assert(embed.includes('encodeURIComponent(resolvedSocialUrl || video.url)'), 'Canonical Facebook URLs are not rebuilt safely at render time.');
 assert(embed.includes("video.provider !== 'instagram' && video.provider !== 'facebook'"), 'Both Meta providers are not protected by the availability gate.');
 assert(embed.includes('fetchOEmbed(video.url)') && !embed.includes('controller.abort()'), 'The shared Meta availability request is not StrictMode-safe.');
 assert(embed.includes('socialFrameLoads.current > 1') && embed.includes('setSocialNavigated(true)'), 'Meta iframe navigation is not converted to an EXY fallback.');
@@ -35,6 +36,10 @@ assert(feed.includes("playback.provider === 'youtube'") && feed.includes('onExpa
 assert(oembed.includes("error.name === 'AbortError'") && !oembed.includes("catch {\n      memory.set(url, null);"), 'Aborted Meta checks can still poison the session cache.');
 assert(api.includes("'http://127.0.0.1:5173'") && api.includes("'https://localhost'") && api.includes("'capacitor://localhost'"), 'Vite or Capacitor is missing from the oEmbed CORS allowlist.');
 assert(api.includes("response.setHeader('Access-Control-Allow-Origin', origin)") && !api.includes("Access-Control-Allow-Origin', '*'"), 'The oEmbed API CORS policy is missing or unsafe.');
+assert(api.includes("/^exy-[a-z0-9-]+-cj-school-s-projects\\.vercel\\.app$/i"), 'EXY Vercel previews are missing from the strict CORS origin gate.');
+assert(api.includes('resolveFacebookUrl(candidate)') && api.includes("method: 'HEAD'") && api.includes("redirect: 'manual'"), 'Facebook share links are not resolved server-side.');
+assert(api.includes("status: 'unresolved_redirect'") && api.includes('available: false'), 'Unresolved Facebook shares can still mount a provider error document.');
+assert(embed.includes('setResolvedSocialUrl(result.normalizedUrl)'), 'The resolved Facebook URL is not handed to the iframe.');
 console.log('PASS 1/3 - Meta availability and navigation are runtime-gated; native EXY video remains the guaranteed playback path.');
 // Check 2 — geometry. All viewer surfaces retain one bounded 9:16 EXY frame,
 // with the action rail above the media.
@@ -44,6 +49,10 @@ assert(css.includes('contain: layout paint;'), 'The social stage can still leak 
 assert(css.includes('isolation: isolate;'), 'The social stage does not isolate provider stacking.');
 assert(css.includes('.lco__action-rail,'), 'Fullscreen action rail is not protected above media.');
 assert(css.includes('.lco__video > .video,') && css.includes('.fs-player__frame > .video'), 'Live and fullscreen containers do not share bounded video rules.');
+assert((prototype.match(/<CategoryRail categories={categories} onGo=/g) ?? []).length === 2, 'Home and Feed do not share the same category rail.');
+assert(prototype.includes("routeScrollRef.current[route.name] = window.scrollY"), 'Home and Feed do not preserve their scroll positions.');
+assert(!prototype.includes("window.scrollTo({ top: 0, behavior: 'smooth' })"), 'Route changes still force a visible scroll jump.');
+assert(css.includes('flex: 0 0 min(82vw, 330px);') && css.includes('.home-c__hero-card') && css.includes('aspect-ratio: 9 / 16;'), 'Home and Feed video cards are not aligned to the shared 9:16 width.');
 console.log('PASS 2/3 — all player surfaces retain a bounded 9:16 frame with Share, Message, and Save above media.');
 
 // Check 3 - clean EXY-owned fallback. Restricted or unavailable Meta posts

@@ -35,6 +35,7 @@ const CACHE_TTL_MS = 6 * 60 * 60 * 1000; // 6h in-memory
 const CACHE_MAX_ENTRIES = 500;
 const RATE_LIMIT_WINDOW_MS = 60_000;
 const RATE_LIMIT_MAX = 60; // per IP per minute
+const FACEBOOK_REDIRECT_TIMEOUT_MS = 4000;
 
 // The browser build uses the production Vercel function while developing on
 // Vite, and Capacitor serves the installed app from a localhost origin. Keep
@@ -49,9 +50,24 @@ const ALLOWED_ORIGINS = new Set([
   'capacitor://localhost',
 ]);
 
+function isAllowedOrigin(origin: string): boolean {
+  if (ALLOWED_ORIGINS.has(origin)) return true;
+
+  // Vercel gives every EXY branch a unique preview hostname. Permit only
+  // previews owned by this project/team, never arbitrary *.vercel.app sites.
+  try {
+    const parsed = new URL(origin);
+    return parsed.protocol === 'https:'
+      && parsed.port === ''
+      && /^exy-[a-z0-9-]+-cj-school-s-projects\.vercel\.app$/i.test(parsed.hostname);
+  } catch {
+    return false;
+  }
+}
+
 function applyCors(request: VercelRequest, response: VercelResponse): void {
   const origin = typeof request.headers.origin === 'string' ? request.headers.origin : '';
-  if (!ALLOWED_ORIGINS.has(origin)) return;
+  if (!isAllowedOrigin(origin)) return;
   response.setHeader('Access-Control-Allow-Origin', origin);
   response.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
   response.setHeader('Access-Control-Allow-Headers', 'Accept, Content-Type');
@@ -138,6 +154,52 @@ export function normalizeUrl(raw: string): Normalized | null {
   return null;
 }
 
+function needsFacebookResolution(normalized: Normalized): boolean {
+  if (normalized.provider !== 'facebook') return false;
+  const parsed = new URL(normalized.normalizedUrl);
+  return /^\/share\/[vr]\//.test(parsed.pathname) || parsed.hostname.endsWith('fb.watch');
+}
+
+/**
+ * Facebook share links are redirect tokens, not valid iframe sources. Resolve
+ * them server-side, while validating every hop against the same strict Meta
+ * host allowlist so this endpoint cannot become an open redirect/proxy.
+ */
+export async function resolveFacebookUrl(normalized: Normalized): Promise<Normalized | null> {
+  if (!needsFacebookResolution(normalized)) return normalized;
+
+  let current = normalized.normalizedUrl;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), FACEBOOK_REDIRECT_TIMEOUT_MS);
+
+  try {
+    for (let hop = 0; hop < 3; hop += 1) {
+      const response = await fetch(current, {
+        method: 'HEAD',
+        redirect: 'manual',
+        signal: controller.signal,
+        headers: {
+          Accept: 'text/html',
+          'User-Agent': 'Mozilla/5.0 (compatible; EXY/1.5; +https://exy-green.vercel.app)',
+        },
+      });
+      const location = response.headers.get('location');
+      if (!location) return null;
+
+      const next = new URL(location, current).toString();
+      const candidate = normalizeUrl(next);
+      if (!candidate || candidate.provider !== 'facebook') return null;
+      if (!needsFacebookResolution(candidate) && /^\d+$/.test(candidate.externalId ?? '')) return candidate;
+      current = candidate.normalizedUrl;
+    }
+    return null;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /* -------------------------------------------------------------------------- */
 /* In-memory cache + rate limit (per warm lambda instance)                     */
 /* -------------------------------------------------------------------------- */
@@ -200,6 +262,7 @@ export interface OEmbedResponse {
     | 'ok'
     | 'not_configured'
     | 'unsupported_url'
+    | 'unresolved_redirect'
     | 'not_found'
     | 'restricted'
     | 'rate_limited'
@@ -342,14 +405,25 @@ export default async function handler(request: VercelRequest, response: VercelRe
     return response.status(429).json({ ...baseResponse(raw, null), status: 'rate_limited', message: 'Too many requests.' });
   }
 
-  const normalized = normalizeUrl(raw);
-  if (!normalized) {
+  const candidate = normalizeUrl(raw);
+  if (!candidate) {
     // 200 with available:false keeps the card rendering its branded fallback.
     response.setHeader('Cache-Control', 'public, max-age=300');
     return response.status(200).json({
       ...baseResponse(raw, null),
       status: 'unsupported_url',
       message: 'Only public Instagram or Facebook post URLs are supported.',
+    });
+  }
+
+  const normalized = await resolveFacebookUrl(candidate);
+  if (!normalized) {
+    response.setHeader('Cache-Control', 'public, max-age=300');
+    return response.status(200).json({
+      ...baseResponse(raw, candidate),
+      available: false,
+      status: 'unresolved_redirect',
+      message: 'Facebook share link could not be resolved to a permanent public video URL.',
     });
   }
 

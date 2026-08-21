@@ -3425,14 +3425,14 @@ ul {
   gap: 12px;
   overflow-x: auto;
   scroll-snap-type: x mandatory;
-  padding: 5px max(10px, calc((100% - min(300px, 72vw)) / 2)) 11px;
+  padding: 5px max(10px, calc((100% - min(82vw, 330px)) / 2)) 11px;
   scrollbar-width: none;
 }
 
 .home-c__hero-card {
   position: relative;
-  flex: 0 0 min(300px, 72vw);
-  aspect-ratio: 9 / 13;
+  flex: 0 0 min(82vw, 330px);
+  aspect-ratio: 9 / 16;
   overflow: hidden;
   scroll-snap-align: center;
   border: 1px solid var(--line);
@@ -3682,11 +3682,11 @@ ul {
 
   .home-c__hero-rail {
     gap: 9px;
-    padding-inline: calc((100% - 76vw) / 2);
+    padding-inline: max(10px, calc((100% - min(82vw, 330px)) / 2));
   }
 
   .home-c__hero-card {
-    flex-basis: 76vw;
+    flex-basis: min(82vw, 330px);
     border-radius: 22px;
   }
 
@@ -5944,6 +5944,10 @@ ul {
   justify-content: space-between;
   gap: 12px;
   padding: 14px 0 10px;
+}
+
+.feed-view__content .feed-bar {
+  padding-top: clamp(20px, 3vw, 34px);
 }
 
 .feed-bar__title {
