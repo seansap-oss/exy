@@ -4,17 +4,34 @@ import { isProviderPlaybackUrl, parseVideoUrl } from './embeds';
 
 const TABLE = 'listings';
 
+function recoverVideoFromText(...values: unknown[]): VideoEmbed | null {
+  for (const value of values) {
+    const links = String(value ?? '').match(/https?:\/\/[^\s<>"']+/g) ?? [];
+    for (const link of links) {
+      const parsed = parseVideoUrl(link.replace(/[),.;!?]+$/, ''));
+      if (parsed) return parsed;
+    }
+  }
+  return null;
+}
+
 /* eslint-disable @typescript-eslint/no-explicit-any */
 export function rowToListing(row: any): Listing {
   const storedVideo = row.video && typeof row.video === 'object' ? row.video : null;
   const sourceUrls = [storedVideo?.url, row.video_url]
     .map((value) => String(value ?? '').trim())
     .filter(Boolean);
-  const parsedVideo = sourceUrls.map((url) => parseVideoUrl(url)).find(Boolean) ?? null;
-  const provider = storedVideo?.provider ?? row.provider ?? parsedVideo?.provider ?? 'none';
+  const parsedSource = sourceUrls.map((url) => parseVideoUrl(url)).find(Boolean) ?? null;
+  const storedProvider = storedVideo?.provider ?? row.provider ?? parsedSource?.provider ?? 'none';
   // Prefer a genuine social URL when legacy JSON and provider columns disagree.
   // A Supabase image URL is cover artwork, never a provider playback source.
-  const videoUrl = sourceUrls.find((url) => isProviderPlaybackUrl(provider, url)) ?? '';
+  const storedPlaybackUrl = sourceUrls.find((url) => isProviderPlaybackUrl(storedProvider, url));
+  // v1.5.37/v1.5.38 could replace a manually entered social URL with the first
+  // uploaded image. Recover that URL only when the stored source is invalid.
+  const recoveredVideo = storedPlaybackUrl ? null : recoverVideoFromText(row.title, row.description);
+  const provider = storedPlaybackUrl ? storedProvider : recoveredVideo?.provider ?? storedProvider;
+  const videoUrl = storedPlaybackUrl ?? recoveredVideo?.url ?? '';
+  const parsedVideo = videoUrl ? parseVideoUrl(videoUrl) : null;
   const externalId = String(storedVideo?.externalId ?? row.provider_media_id ?? parsedVideo?.externalId ?? '');
   const video: VideoEmbed | undefined = videoUrl
     ? {

@@ -67,7 +67,8 @@ export function detectProvider(url: string): VideoProvider {
 export function isProviderPlaybackUrl(provider: VideoProvider, rawUrl: string | null | undefined): boolean {
   if (!rawUrl?.trim()) return false;
   try {
-    const host = new URL(rawUrl).hostname.toLowerCase().replace(/^www\./, '');
+    const parsedUrl = new URL(rawUrl);
+    const host = parsedUrl.hostname.toLowerCase().replace(/^www\./, '');
     switch (provider) {
       case 'youtube':
         return host === 'youtube.com' || host.endsWith('.youtube.com') || host === 'youtu.be';
@@ -78,7 +79,9 @@ export function isProviderPlaybackUrl(provider: VideoProvider, rawUrl: string | 
       case 'tiktok':
         return host === 'tiktok.com' || host.endsWith('.tiktok.com');
       case 'native':
-        return /^https?:$|^blob:$/.test(new URL(rawUrl).protocol);
+        return parsedUrl.protocol === 'blob:' || (
+          /^https?:$/.test(parsedUrl.protocol) && /\.(?:m4v|mov|mp4|webm)$/i.test(parsedUrl.pathname)
+        );
       default:
         return false;
     }

@@ -88,6 +88,7 @@ export function SellFlow({ open, onClose, profile, activeAdCount, onPublish, onU
       return setError('Enter a valid contact number, or enable phone privacy masking.');
     }
 
+    const uploadedVideo = hosted.find((item) => item.kind === 'video');
     const listing: Listing = {
       id: uid('lst'),
       title: form.title.trim(),
@@ -106,13 +107,13 @@ export function SellFlow({ open, onClose, profile, activeAdCount, onPublish, onU
       city: form.city.trim(),
       sellerId: profile.id,
       video:
-        limits.videos > 0 && hosted.length
+        limits.videos > 0 && uploadedVideo
           ? {
               provider: 'native' as const,
-              url: hosted[0].src,
-              externalId: hosted[0].id,
-              embedSrc: hosted[0].src,
-              poster: hosted[0].poster,
+              url: uploadedVideo.src,
+              externalId: uploadedVideo.id,
+              embedSrc: uploadedVideo.src,
+              poster: uploadedVideo.poster,
             }
           : limits.videos > 0 && video
             ? video

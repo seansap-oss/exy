@@ -13,6 +13,7 @@ const scripts = readFileSync('src/lib/embedScripts.ts', 'utf8');
 const api = readFileSync('api/oembed.ts', 'utf8');
 const prototype = readFileSync('src/Prototype.tsx', 'utf8');
 const drawer = readFileSync('src/components/ExpressPostDrawer.tsx', 'utf8');
+const sellFlow = readFileSync('src/components/SellFlow.tsx', 'utf8');
 const uploader = readFileSync('src/components/UnifiedUploader.tsx', 'utf8');
 const smartCover = readFileSync('src/lib/smartCover.ts', 'utf8');
 const coverApi = readFileSync('api/cover.ts', 'utf8');
@@ -23,7 +24,7 @@ function assert(condition, message) {
   if (!condition) throw new Error(message);
 }
 
-assert(pkg.version === '1.5.39', `Expected EXY v1.5.39, found ${pkg.version}.`);
+assert(pkg.version === '1.5.40', `Expected EXY v1.5.40, found ${pkg.version}.`);
 
 // Check 1 - runtime provider gate. Meta players mount only after oEmbed proves
 // availability; provider self-navigation becomes an EXY fallback.
@@ -84,9 +85,13 @@ assert(uploader.includes('imageOnly') && uploader.includes('ACCEPT_IMAGES'), 'Th
 assert(thumbnails.includes("item.kind === 'image')?.src"), 'Hosted cover photos do not have preview priority.');
 assert(overlay.includes('candidates={listingCandidates(listing)}'), 'The EXY player fallback does not receive the listing cover as a visual-only candidate.');
 assert(parser.includes('export function isProviderPlaybackUrl'), 'Provider URL safety gate is missing.');
-assert(store.includes('sourceUrls.find((url) => isProviderPlaybackUrl(provider, url))'), 'Saved listings can still hydrate a cover as a provider URL.');
+assert(store.includes('sourceUrls.find((url) => isProviderPlaybackUrl(storedProvider, url))'), 'Saved listings can still hydrate a cover as a provider URL.');
+assert(store.includes('recoverVideoFromText(row.title, row.description)'), 'Legacy listings cannot recover a social URL after an image was stored as video.');
 assert(!playback.includes("video.url?.startsWith('http')"), 'Playback can still promote any HTTPS image to an original URL.');
 assert(embed.includes("setSocialAvailability('unavailable');") && embed.includes('A saved cover must never be requested'), 'The embed renderer can still request a cover image as a Reel.');
+assert(sellFlow.includes("hosted.find((item) => item.kind === 'video')"), 'The manual listing publisher can still promote a thumbnail to native video.');
+assert(!sellFlow.includes('url: hosted[0].src') && !sellFlow.includes('embedSrc: hosted[0].src'), 'The first uploaded image can still become the playback source.');
+assert(embed.includes("video.provider === 'native' && isProviderPlaybackUrl('native', video.embedSrc)"), 'The player can still mount an image URL in a native video element.');
 console.log('PASS 3/4 - unavailable Meta posts keep the clean EXY fallback; covers are visual-only and cannot become a playback URL.');
 
 // Check 4 - Smart Cover Studio. One signed-in, server-side AI generation runs

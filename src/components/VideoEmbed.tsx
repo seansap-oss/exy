@@ -128,7 +128,7 @@ export function VideoEmbed({
     <div className={cls}>
       {playing ? (
         <>
-          {video.provider === 'native' ? (
+          {video.provider === 'native' && isProviderPlaybackUrl('native', video.embedSrc) ? (
             <video src={video.embedSrc} poster={video.poster} controls autoPlay playsInline className="video__native" />
           ) : iframeEligible && currentEmbedSrc && !showUnavailable && !showChecking ? (
             socialEmbeddable ? (
