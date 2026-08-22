@@ -57,6 +57,37 @@ export function detectProvider(url: string): VideoProvider {
 }
 
 /**
+ * True only when a URL belongs to the provider recorded on a listing.
+ *
+ * Covers are hosted on EXY/Supabase and can look like ordinary HTTPS links.
+ * They must never be accepted as the source of an Instagram, Facebook or
+ * YouTube player, even when an old persisted row accidentally stored one in
+ * its `video.url` field.
+ */
+export function isProviderPlaybackUrl(provider: VideoProvider, rawUrl: string | null | undefined): boolean {
+  if (!rawUrl?.trim()) return false;
+  try {
+    const host = new URL(rawUrl).hostname.toLowerCase().replace(/^www\./, '');
+    switch (provider) {
+      case 'youtube':
+        return host === 'youtube.com' || host.endsWith('.youtube.com') || host === 'youtu.be';
+      case 'instagram':
+        return host === 'instagram.com' || host.endsWith('.instagram.com');
+      case 'facebook':
+        return host === 'facebook.com' || host.endsWith('.facebook.com') || host === 'fb.watch';
+      case 'tiktok':
+        return host === 'tiktok.com' || host.endsWith('.tiktok.com');
+      case 'native':
+        return /^https?:$|^blob:$/.test(new URL(rawUrl).protocol);
+      default:
+        return false;
+    }
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Parses any supported social video URL into a playback descriptor.
  * Returns null when the URL cannot be resolved to a known embed.
  */

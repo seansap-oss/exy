@@ -1,4 +1,5 @@
 import type { Listing, VideoEmbed, VideoProvider } from '../types';
+import { isProviderPlaybackUrl } from './embeds';
 
 /**
  * Provider-aware thumbnail resolution.
@@ -94,7 +95,7 @@ export const PROVIDER_LABEL: Record<VideoProvider, string> = {
 /** Deep link to the original post when embedding is blocked. */
 export function originalUrl(video?: VideoEmbed): string | null {
   if (!video) return null;
-  if (video.url?.startsWith('http')) return video.url;
+  if (isProviderPlaybackUrl(video.provider, video.url)) return video.url;
   switch (video.provider) {
     case 'youtube':
       return `https://www.youtube.com/watch?v=${video.externalId}`;

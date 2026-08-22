@@ -1,5 +1,6 @@
 import type { Listing, VideoProvider } from '../types';
 import { originalUrl } from './thumbnails';
+import { isProviderPlaybackUrl } from './embeds';
 
 /**
  * Central playback resolver.
@@ -85,10 +86,10 @@ export function resolvePlayback(listing: Listing | undefined): Playback {
   const video = listing.video;
   if (!video) return NO_MEDIA;
 
-  const original = originalUrl(video) ?? (video.url?.startsWith('http') ? video.url : null);
+  const original = originalUrl(video);
 
   // 2. YouTube plays inline in an iframe.
-  if (video.provider === 'youtube' && video.embedSrc) {
+  if (video.provider === 'youtube' && video.embedSrc && isProviderPlaybackUrl('youtube', original)) {
     return {
       kind: 'inline',
       provider: 'youtube',
@@ -100,7 +101,7 @@ export function resolvePlayback(listing: Listing | undefined): Playback {
   }
 
   // 3. Instagram can use its official embed when Meta permits it.
-  if (video.provider === 'instagram' && (original || video.embedSrc)) {
+  if (video.provider === 'instagram' && original && isProviderPlaybackUrl('instagram', original)) {
     return {
       kind: 'embed',
       provider: 'instagram',
@@ -113,7 +114,7 @@ export function resolvePlayback(listing: Listing | undefined): Playback {
 
   // Facebook opens the bounded EXY viewer. VideoEmbed validates availability
   // before mounting the provider iframe; leaving EXY is always explicit.
-  if (video.provider === 'facebook' && original) {
+  if (video.provider === 'facebook' && original && isProviderPlaybackUrl('facebook', original)) {
     return {
       kind: 'embed',
       provider: 'facebook',

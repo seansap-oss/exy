@@ -6,18 +6,24 @@ const overlay = readFileSync('src/components/LiveClassifiedsOverlay.tsx', 'utf8'
 const feed = readFileSync('src/components/VisualFeed.tsx', 'utf8');
 const preview = readFileSync('src/components/MediaPreview.tsx', 'utf8');
 const parser = readFileSync('src/lib/embeds.ts', 'utf8');
+const store = readFileSync('src/lib/listingsStore.ts', 'utf8');
 const oembed = readFileSync('src/lib/oembed.ts', 'utf8');
 const playback = readFileSync('src/lib/playback.ts', 'utf8');
 const scripts = readFileSync('src/lib/embedScripts.ts', 'utf8');
 const api = readFileSync('api/oembed.ts', 'utf8');
 const prototype = readFileSync('src/Prototype.tsx', 'utf8');
+const drawer = readFileSync('src/components/ExpressPostDrawer.tsx', 'utf8');
+const uploader = readFileSync('src/components/UnifiedUploader.tsx', 'utf8');
+const smartCover = readFileSync('src/lib/smartCover.ts', 'utf8');
+const coverApi = readFileSync('api/cover.ts', 'utf8');
+const thumbnails = readFileSync('src/lib/thumbnails.ts', 'utf8');
 const pkg = JSON.parse(readFileSync('package.json', 'utf8'));
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
 }
 
-assert(pkg.version === '1.5.35', `Expected EXY v1.5.35, found ${pkg.version}.`);
+assert(pkg.version === '1.5.39', `Expected EXY v1.5.39, found ${pkg.version}.`);
 
 // Check 1 - runtime provider gate. Meta players mount only after oEmbed proves
 // availability; provider self-navigation becomes an EXY fallback.
@@ -40,7 +46,7 @@ assert(api.includes("/^exy-[a-z0-9-]+-cj-school-s-projects\\.vercel\\.app$/i"), 
 assert(api.includes('resolveFacebookUrl(candidate)') && api.includes("method: 'HEAD'") && api.includes("redirect: 'manual'"), 'Facebook share links are not resolved server-side.');
 assert(api.includes("status: 'unresolved_redirect'") && api.includes('available: false'), 'Unresolved Facebook shares can still mount a provider error document.');
 assert(embed.includes('setResolvedSocialUrl(result.normalizedUrl)'), 'The resolved Facebook URL is not handed to the iframe.');
-console.log('PASS 1/3 - Meta availability and navigation are runtime-gated; native EXY video remains the guaranteed playback path.');
+console.log('PASS 1/4 - Meta availability and navigation are runtime-gated; native EXY video remains the guaranteed playback path.');
 // Check 2 — geometry. All viewer surfaces retain one bounded 9:16 EXY frame,
 // with the action rail above the media.
 assert(css.includes('aspect-ratio: 9 / 16;'), 'The shared social stage does not enforce 9:16 geometry.');
@@ -52,8 +58,11 @@ assert(css.includes('.lco__video > .video,') && css.includes('.fs-player__frame 
 assert((prototype.match(/<CategoryRail categories={categories} onGo=/g) ?? []).length === 2, 'Home and Feed do not share the same category rail.');
 assert(prototype.includes("routeScrollRef.current[route.name] = window.scrollY"), 'Home and Feed do not preserve their scroll positions.');
 assert(!prototype.includes("window.scrollTo({ top: 0, behavior: 'smooth' })"), 'Route changes still force a visible scroll jump.');
-assert(css.includes('flex: 0 0 min(82vw, 330px);') && css.includes('.home-c__hero-card') && css.includes('aspect-ratio: 9 / 16;'), 'Home and Feed video cards are not aligned to the shared 9:16 width.');
-console.log('PASS 2/3 — all player surfaces retain a bounded 9:16 frame with Share, Message, and Save above media.');
+assert(css.includes('flex: 0 0 min(74vw, 300px);') && css.includes('.home-c__hero-card') && css.includes('aspect-ratio: 9 / 16;'), 'The Home carousel cards are not reduced to the approved 10%-smaller 9:16 width.');
+assert(css.includes('touch-action: pan-y;') && css.includes('scroll-snap-stop: always;'), 'The Home carousel does not retain native thumb-swiping and snap behaviour.');
+assert(css.includes('.home-c__chevron-back') && !prototype.includes('className="home-c__chevron-flip"><IconChevron size={18} /></span></button>'), 'Home carousel arrows are not true left/right controls.');
+assert(prototype.includes('onScroll={syncHeroIndex}') && prototype.includes('onClick={() => onExpand(listing)}'), 'Home carousel taps do not open the EXY video overlay directly.');
+console.log('PASS 2/4 — all player surfaces retain a bounded 9:16 frame; the Home carousel is smaller, thumb-swipable and uses true left/right controls.');
 
 // Check 3 - clean EXY-owned fallback. Restricted or unavailable Meta posts
 // retain listing identity and an explicit original-provider action, while the
@@ -67,4 +76,30 @@ assert(!scripts.includes('connect.facebook.net') && !scripts.includes('loadFaceb
 assert(playback.includes('fb://facewebmodal/f?href='), 'Explicit Facebook fallback handoff is missing.');
 assert(!overlay.includes('handoffToProvider') && feed.includes("if (playback.kind === 'embed')") && feed.includes("playback.provider !== 'instagram' && playback.provider !== 'facebook'"), 'Meta playback is not isolated from automatic provider handoff.');
 assert(embed.includes('Meta requires a login or redirected away from the embedded player.'), 'The Meta login/navigation fallback reason is missing.');
-console.log('PASS 3/3 - unavailable or redirected Meta posts switch to the EXY fallback; leaving EXY remains an explicit Open original action.');
+assert(drawer.includes("video.provider === 'instagram' || video.provider === 'facebook'"), 'Meta imports do not request a seller cover.');
+assert(drawer.includes('Add one clear product cover'), 'The seller cover requirement is missing.');
+assert(drawer.includes('video,') && !drawer.includes('poster: coverPhoto.src'), 'The uploaded cover is still coupled to the social video playback source.');
+assert(drawer.includes('media: coverPhoto ? [coverPhoto] : undefined'), 'The uploaded cover is not persisted as hosted listing media.');
+assert(uploader.includes('imageOnly') && uploader.includes('ACCEPT_IMAGES'), 'The cover picker is not restricted to still images.');
+assert(thumbnails.includes("item.kind === 'image')?.src"), 'Hosted cover photos do not have preview priority.');
+assert(overlay.includes('candidates={listingCandidates(listing)}'), 'The EXY player fallback does not receive the listing cover as a visual-only candidate.');
+assert(parser.includes('export function isProviderPlaybackUrl'), 'Provider URL safety gate is missing.');
+assert(store.includes('sourceUrls.find((url) => isProviderPlaybackUrl(provider, url))'), 'Saved listings can still hydrate a cover as a provider URL.');
+assert(!playback.includes("video.url?.startsWith('http')"), 'Playback can still promote any HTTPS image to an original URL.');
+assert(embed.includes("setSocialAvailability('unavailable');") && embed.includes('A saved cover must never be requested'), 'The embed renderer can still request a cover image as a Reel.');
+console.log('PASS 3/4 - unavailable Meta posts keep the clean EXY fallback; covers are visual-only and cannot become a playback URL.');
+
+// Check 4 - Smart Cover Studio. One signed-in, server-side AI generation runs
+// while the seller fills the form. Manual photos cancel/override it and every
+// source is normalised into a compact 9:16 WebP before Supabase upload.
+assert(drawer.includes('generateSmartCover') && drawer.includes('coverAttemptRef.current = attemptKey'), 'The one-shot background cover job is missing.');
+assert(drawer.includes("source: 'ai-generated'") && drawer.includes('setCoverMedia([media])'), 'Generated covers are not uploaded and attached automatically.');
+assert(drawer.includes('onUploadStart={beginManualCover}') && drawer.includes('coverJobRef.current?.abort()'), 'Manual covers do not override an in-flight AI cover.');
+assert(uploader.includes('normalizeSmartCover') && uploader.includes('normalizeCover'), 'Seller covers are not normalised to EXY geometry.');
+assert(smartCover.includes('const COVER_WIDTH = 576') && smartCover.includes('const COVER_HEIGHT = 1024'), 'Smart covers do not use the bounded 9:16 canvas.');
+assert(smartCover.includes("'image/webp'") && smartCover.includes('0.78'), 'Smart covers are not compressed to lightweight WebP.');
+assert(coverApi.includes('authenticatedUser(authorization)') && coverApi.includes("response.status(401)"), 'The cover API is not protected by the Supabase seller session.');
+assert(coverApi.includes('CLOUDFLARE_ACCOUNT_ID') && coverApi.includes('CLOUDFLARE_AI_API_TOKEN'), 'Server-only AI provider configuration is missing.');
+assert(!smartCover.includes('CLOUDFLARE_AI_API_TOKEN') && !smartCover.includes('CLOUDFLARE_API_TOKEN'), 'An AI provider token leaked into client source.');
+assert(coverApi.includes('RATE_MAX = 3') && coverApi.includes('rateLimited(userId)'), 'AI cover abuse protection is missing.');
+console.log('PASS 4/4 - one automatic AI cover is generated in the background; manual covers override it and all covers become lightweight 9:16 WebP.');

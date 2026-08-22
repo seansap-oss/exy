@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { VideoEmbed as VideoEmbedType } from '../types';
-import { providerAllow, providerLabel } from '../lib/embeds';
+import { isProviderPlaybackUrl, providerAllow, providerLabel } from '../lib/embeds';
 import { fallbackGradient, originalUrl, thumbnailCandidates } from '../lib/thumbnails';
 import { handoffToProvider } from '../lib/playback';
 import { fetchOEmbed } from '../lib/oembed';
@@ -26,7 +26,7 @@ function resolvedEmbedSource(video: VideoEmbedType, resolvedSocialUrl: string): 
   // Older Supabase rows deliberately store no Facebook iframe. Rebuild the
   // official plugin URL only in memory; it is mounted only after oEmbed proves
   // the post is public and embeddable.
-  if (video.provider === 'facebook' && video.url) {
+  if (video.provider === 'facebook' && isProviderPlaybackUrl('facebook', resolvedSocialUrl || video.url)) {
     return `https://www.facebook.com/plugins/video.php?href=${encodeURIComponent(resolvedSocialUrl || video.url)}&show_text=false&autoplay=true&width=500`;
   }
   return video.embedSrc;
@@ -53,6 +53,7 @@ export function VideoEmbed({
   const socialFrameLoads = useRef(0);
   const gradient = fallback ?? fallbackGradient();
   const socialEmbeddable = video?.provider === 'instagram' || video?.provider === 'facebook';
+  const hasValidSocialUrl = Boolean(video && socialEmbeddable && isProviderPlaybackUrl(video.provider, video.url));
   const currentEmbedSrc = video ? resolvedEmbedSource(video, resolvedSocialUrl) : '';
 
   useEffect(() => {
@@ -67,6 +68,12 @@ export function VideoEmbed({
   useEffect(() => {
     if (!video || (video.provider !== 'instagram' && video.provider !== 'facebook')) {
       setSocialAvailability('ready');
+      return;
+    }
+
+    if (!isProviderPlaybackUrl(video.provider, video.url)) {
+      // A saved cover must never be requested, embedded or opened as a Reel.
+      setSocialAvailability('unavailable');
       return;
     }
 
@@ -108,7 +115,7 @@ export function VideoEmbed({
     : currentEmbedSrc;
   const showUnavailable = socialEmbeddable && (socialAvailability === 'unavailable' || socialNavigated);
   const showChecking = socialEmbeddable && socialAvailability === 'checking';
-  const iframeEligible = video.provider === 'youtube' || socialEmbeddable;
+  const iframeEligible = (video.provider === 'youtube' && isProviderPlaybackUrl('youtube', original)) || (socialEmbeddable && hasValidSocialUrl);
   const providerFallbackTitle = showChecking
       ? `Checking this ${providerLabel(video.provider)}…`
       : `${providerLabel(video.provider)} cannot play this post here.`;

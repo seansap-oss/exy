@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Listing, Seller } from '../types';
 import { inr } from '../lib/format';
-import { fallbackGradient } from '../lib/thumbnails';
+import { fallbackGradient, listingCandidates } from '../lib/thumbnails';
+import { isProviderPlaybackUrl } from '../lib/embeds';
 import { IconChat, IconClose, IconHeart, IconSend, IconShare } from './Icons';
 import { VideoEmbed } from './VideoEmbed';
 
@@ -74,7 +75,9 @@ export function LiveClassifiedsOverlay({
   }, [messageOpen]);
 
   async function shareListing() {
-    const url = listing.video?.url || window.location.href;
+    const url = listing.video && isProviderPlaybackUrl(listing.video.provider, listing.video.url)
+      ? listing.video.url
+      : window.location.href;
     try {
       if (navigator.share) {
         await navigator.share({ title: listing.title, text: listing.description, url });
@@ -108,6 +111,7 @@ export function LiveClassifiedsOverlay({
             <VideoEmbed
               video={listing.video}
               fallback={fallbackGradient(listing)}
+              candidates={listingCandidates(listing)}
               title={listing.title}
               orientation="vertical"
               autoStart

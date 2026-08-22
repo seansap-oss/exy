@@ -4,6 +4,6 @@ export const androidBuildConfig = {
   supabaseAnonKey: "",
   apiBaseUrl: "https://exy-green.vercel.app",
   stamp: "",
-  releaseVersion: "1.5.35",
-  releaseMarker: "EXY_RELEASE_VERSION:1.5.35",
+  releaseVersion: "1.5.39",
+  releaseMarker: "EXY_RELEASE_VERSION:1.5.39",
 } as const;
